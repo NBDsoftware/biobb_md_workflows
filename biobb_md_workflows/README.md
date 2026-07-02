@@ -2,11 +2,7 @@
 
 BioBB workflows are ready-to-use pipelines built using BioExcel Building Blocks (BioBB) to perform common tasks in biomolecular simulations and modeling. Each workflow is a CLI entrypoint of the `biobb_md_workflows` package.
 
-Different workflows can be combined to create more complex pipelines. This repo covers the GROMACS/AmberTools-based workflows; virtual-screening workflows (`cavity_analysis`, `vs_autodock`) live in [biobb_vs_workflows](https://github.com/NBDsoftware/biobb_vs_workflows).
-
-## Single protein pipeline
-
-![alt text](../img/Single_protein_scheme.png?raw=true)
+Different workflows can be combined to create more complex pipelines. This repo covers the workflows related to MD simulations with GROMACS; virtual-screening workflows live in [biobb_vs_workflows](https://github.com/NBDsoftware/biobb_vs_workflows); godmd workflows live in [biobb_godmd_workflows](https://github.com/NBDsoftware/biobb_godmd_workflows).
 
 ## Workflows
 
