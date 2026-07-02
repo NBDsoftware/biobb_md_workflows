@@ -3,8 +3,8 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "biobb_workflows"
-version = "1.0.0"
+name = "biobb_md_workflows"
+version = "2.0.0"
 requires-python = ">=3.10"
 dependencies = [
     "biobb_common>=5.2.2",
@@ -15,36 +15,20 @@ dependencies = [
     "propka>=3.5.1",
     "mdanalysis",
     "biopython<=1.81",
-]
-
-[project.optional-dependencies]
-# NBDSoftware forks — required by md_gromacs, traj_postprocessing, cavity_analysis.
-gromacs = [
+    # NBDSoftware forks — required by md_gromacs, traj_postprocessing.
     "biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs",
     "biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis",
-]
-# Required by md_gromacs, ligand_parameterization, protein_preparation.
-# Conflicts with [vina] — install one or the other.
-# pip install -e .[gromacs,ambertools]
-ambertools = [
+    # Required by md_gromacs, ligand_parameterization, protein_preparation.
     "biobb_amber>=5.2.1",
     "biobb_chemistry>=5.2.1",
 ]
-# Required by vs_autodock (and partially cavity_analysis).
-# Conflicts with [ambertools] — install one or the other.
-# pip install -e .[gromacs,vina]
-vina = [
-    "biobb_vs>=5.0.0",
-]
 
 [project.scripts]
-md_gromacs                = "biobb_workflows.md_gromacs.md_gromacs:main"
-ligand_parameterization   = "biobb_workflows.ligand_parameterization.ligand_parameterization:main"
-protein_preparation       = "biobb_workflows.protein_preparation.protein_preparation:main"
-traj_postprocessing       = "biobb_workflows.traj_postprocessing.traj_postprocessing:main"
-cavity_analysis           = "biobb_workflows.cavity_analysis.cavity_analysis:main"
-vs_autodock               = "biobb_workflows.vs_autodock.vs_autodock:main"
+md_gromacs                = "biobb_md_workflows.md_gromacs.md_gromacs:main"
+ligand_parameterization   = "biobb_md_workflows.ligand_parameterization.ligand_parameterization:main"
+protein_preparation       = "biobb_md_workflows.protein_preparation.protein_preparation:main"
+traj_postprocessing       = "biobb_md_workflows.traj_postprocessing.traj_postprocessing:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["biobb_workflows*"]
+include = ["biobb_md_workflows*"]

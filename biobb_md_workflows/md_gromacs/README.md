@@ -8,11 +8,11 @@ This workflow uses BioBBs to fix PDB defects, prepare the MD simulations, equili
 
 ---
 
-Go to the workflow folder and install the conda environment (running in Nostrum's cluster use the already installed environments located in */shared/work/BiobbWorkflows/envs*)
+Install the repo's conda environment (running in Nostrum's cluster use the already installed environments located in */shared/work/BiobbWorkflows/envs*)
 
 ```bash
 export KEY_MODELLER="HERE YOUR MODELLER KEY"
-conda env create -f environment.yml
+conda env create -f ../../environment.yml
 conda activate biobb_md
 ```
 

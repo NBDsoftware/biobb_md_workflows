@@ -1,6 +1,8 @@
-# Bioexcel Building Block workflows
+# BioBB workflows for MD simulations with GROMACS
 
-These workflows can be run together or as independent workflows. They use BioExcel Building Blocks (BioBB) to integrate different popular biomolecular simulation tools. This software has been developed for the [European BioExcel](http://bioexcel.eu/), funded by the European Commission (EU Horizon Europe [101093290](https://cordis.europa.eu/project/id/101093290)).
+These workflows use BioExcel Building Blocks (BioBB) to integrate different popular biomolecular simulation tools. This software has been developed for the [European BioExcel](http://bioexcel.eu/), funded by the European Commission (EU Horizon Europe [101093290](https://cordis.europa.eu/project/id/101093290)).
+
+See [biobb_md_workflows/README.md](biobb_md_workflows/README.md) for installation and usage. Virtual-screening workflows (`cavity_analysis`, `vs_autodock`) live in [biobb_vs_workflows](https://github.com/NBDsoftware/biobb_vs_workflows).
 
 ## Licensing
 
