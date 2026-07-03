@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # Importing all the needed libraries
-from typing import List, Dict, Union, Optional, Literal
+from typing import List, Dict, Union, Optional, Literal, Tuple, Any
 from pathlib import Path
 import numpy as np
 import logging
@@ -1468,7 +1468,6 @@ def create_config_file(output_path: str,
         
     print(f"Configuration file created at {config_path}.")
     
-    # Return True indicating the file was created
     return config_path
     
   
@@ -1506,7 +1505,7 @@ def md_gromacs(input_pdb_path: Optional[str] = None,
             residues_to_keep: Optional[List[int]] = None,
             debug: Optional[bool] = False,
             output_path: Optional[str] = 'output'
-    ):
+    ) -> Tuple[str, Dict[str, Any]]:
     '''
     Main MD setup and run workflow with GROMACS. Can be used to prepare and launch an MD simulation.
 
