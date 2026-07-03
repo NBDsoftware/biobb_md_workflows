@@ -5,6 +5,7 @@ channels:
   - salilab
 dependencies:
   - python==3.11
+  - pip
   - biobb_common>=5.2.2
   - biobb_structure_utils>=5.2.1
   - biobb_model>=5.2.1
