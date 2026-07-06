@@ -711,6 +711,9 @@ def config_contents(
     # Modeller key is injected into every step that supports it (null when not given);
     # use_modeller is enabled only where a key is available.
     use_modeller = to_yaml(modeller_key is not None)
+    
+    # Convert into absolute path
+    input_pdb_path = os.path.abspath(input_pdb_path)
 
     return f"""
 # Global properties (common for all steps)
@@ -747,9 +750,9 @@ step3_mutations:
     input_pdb_path: dependency/step2_fixaltlocs/output_pdb_path
     output_pdb_path: mutated.pdb
   properties:
-    {step3_mutations_property}
     modeller_key : {to_yaml(modeller_key)}
     use_modeller : {use_modeller}
+    {step3_mutations_property}
 
 # Step 4: Download a FASTA file with the canonical sequence of the protein
 # It requires internet connection and a PDB code

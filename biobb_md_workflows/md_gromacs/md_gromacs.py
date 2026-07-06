@@ -800,6 +800,7 @@ def config_contents(
     equil_frames: Optional[int] = 500,
     prod_time: Optional[float] = 100.0,
     prod_frames: Optional[int] = 2000,
+    input_pdb_path: Optional[str] = None,
     input_gro_path: Optional[str] = None,
     input_top_path: Optional[str] = None,
     seed: Optional[int] = -1,
@@ -921,6 +922,11 @@ def config_contents(
     else:
         input_top_path = "dependency/step1_pdb2gmx/output_top_zip_path"
 
+    if input_pdb_path is not None:
+        input_pdb_path = os.path.abspath(input_pdb_path)
+    else:
+        input_pdb_path = "path/to/input.pdb"
+
     return f"""
 # Global properties (common for all steps)
 global_properties:
@@ -937,7 +943,7 @@ global_properties:
 step1_pdb2gmx:
   tool: pdb2gmx
   paths:
-    input_pdb_path: path/to/input.pdb                     # Will be set by the workflow
+    input_pdb_path: {input_pdb_path}
     output_gro_path: structure.gro
     output_top_zip_path: structure_top.zip
   properties:
@@ -1182,7 +1188,7 @@ step8_mdrun_nvt:
   properties:
     binary_path: {gmx_bin}     
     mpi_bin: {mpi_bin}               
-    use_gpu: {use_gpu}             # Wether to use GPU support or not
+    use_gpu: {to_yaml(use_gpu)}             # Wether to use GPU support or not
     {num_threads_mpi_config}
     {num_threads_omp_config}
     {mpi_np_config}
@@ -1652,6 +1658,7 @@ def md_gromacs(
         'equil_frames': equil_frames,
         'prod_time': prod_time,
         'prod_frames': prod_frames,
+        'input_pdb_path': input_pdb_path,
         'input_gro_path': input_gro_path,
         'input_top_path': input_top_path,
         'solvent_selection': solvent_selection,
@@ -1686,7 +1693,6 @@ def md_gromacs(
         setup_paths = conf.get_paths_dic(prefix=setup_prefix)
 
         if input_mode == 'input_pdb':
-            setup_paths["step1_pdb2gmx"]["input_pdb_path"] = input_pdb_path
             global_log.info(f"step1_pdb2gmx: Reading protonation states for titratable residues (0: deprotonated, 1: protonated)")
             for residue in gmx_titra_resnames.keys():
                 # Determine protonation state of titratable residues from resname in the input PDB file
