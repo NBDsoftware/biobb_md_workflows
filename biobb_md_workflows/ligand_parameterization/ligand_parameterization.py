@@ -422,7 +422,7 @@ def ligand_parameterization(
         output_top_path:  
             output path for the folder with topologies and coordinate files.
         output_path:  
-            output path. Default: working_dir_path in YAML config file.
+            output path. Default: 'output'
         
     Outputs
     -------
@@ -665,8 +665,8 @@ def main():
                         required=False, default=None)
 
     parser.add_argument('--output', dest='output_path',
-                        help="Output path. Default: working_dir_path in YAML config file.",
-                        required=False, default=None)   
+                        help="Output path. Default: 'output'",
+                        required=False, default='output')   
 
     args = parser.parse_args()
     
