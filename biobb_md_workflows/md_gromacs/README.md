@@ -1,193 +1,93 @@
 # MD with GROMACS
 
-This workflow uses BioBBs to fix PDB defects, prepare the MD simulations, equilibrate and execute production runs, do basic analysis of the trajectories and post-process the trajectories.
-
-![alt text](../../img/MD_setup.png?raw=true)
-
-## Quick installation and run
-
----
-
-Install the repo's conda environment (running in Nostrum's cluster use the already installed environments located in */shared/work/BiobbWorkflows/envs*)
-
-```bash
-export KEY_MODELLER="HERE YOUR MODELLER KEY"
-conda env create -f ../../environment.yml
-conda activate biobb_md
-```
-
-See [biobb documentation](https://mmb.irbbarcelona.org/biobb/documentation/source) for additional properties not included in the YAML configuration file.
-
-To run a single call to the workflow in an HPC environment use:
-
-```bash
-sbatch run_HPC.sl
-```
-
-To run a long MD simulation while respecting the time limit of the HPC jobs use:
-
-```bash
-./launch_long_MD.sh
-```
-
-## Inputs
-
----
-
-### Configuration file
-
-Take a look at the YAML configuration file to see the different properties that can be set.
-
-```bash
-vi input.yml
-```
-
-Specially important are: the binary path of GROMACS and the MODELLER key. Make sure the binary path specified and the module loaded in the run file (HPC only) agree between them.
-
-### Command line arguments
-
-The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
-
-
-```bash
-conda activate biobb_md
-md_gromacs --help
-```
-
-```
-usage: MD Simulation with GROMACS [-h] [--input_pdb INPUT_PDB_PATH] [--ligands_folder LIGANDS_TOP_FOLDER] [--input_gro INPUT_GRO_PATH] [--input_top INPUT_TOP_PATH]
-                                  [--input_tpr INPUT_TPR_PATH] [--input_cpt INPUT_CPT_PATH] [--input_plumed_path INPUT_PLUMED_PATH] [--input_plumed_folder INPUT_PLUMED_FOLDER]
-                                  [--config CONFIG_PATH] [--gmx_bin GMX_BIN] [--mpi_bin MPI_BIN] [--mpi_np MPI_NP] [--num_threads_mpi NUM_THREADS_MPI] [--num_threads_omp NUM_THREADS_OMP]
-                                  [--use_gpu] [--restart] [--forcefield FORCEFIELD] [--ions_concentration IONS_CONCENTRATION] [--temp TEMPERATURE] [--seed RANDOM_SEED] [--setup_only]
-                                  [--skip_restraints] [--skip_solvation] [--dt DT] [--equil_time EQUIL_TIME] [--equil_frames EQUIL_FRAMES] [--equil_only] [--prod_time PROD_TIME]
-                                  [--prod_frames PROD_FRAMES] [--remove_raw_traj] [--keep_solvent] [--keep_residues RESIDUES_TO_KEEP [RESIDUES_TO_KEEP ...]] [--debug]
-                                  [--output OUTPUT_PATH]
-
-options:
-  -h, --help            show this help message and exit
-  --input_pdb INPUT_PDB_PATH
-                        Input PDB file. The workflow assumes the protonation state specified by the residue names is the correct one. Default: None
-  --ligands_folder LIGANDS_TOP_FOLDER
-                        Path to folder with .itp and .gro files for the ligands that should be included in the simulation. Compatible with '--input_pdb' and '--input_gro'/'--input_top'.
-                        Default: None
-  --input_gro INPUT_GRO_PATH
-                        Input structure file (.gro). Use together with '--input_top'. Restraints and ligands can be added; use '--skip_solvation' if the system is already solvated.
-                        Default: None
-  --input_top INPUT_TOP_PATH
-                        Input compressed topology file (.zip). Use together with '--input_gro'. Default: None
-  --input_tpr INPUT_TPR_PATH
-                        Input portable binary run input file (.tpr) to restart a simulation. Use together with '--input_cpt'. Default: None
-  --input_cpt INPUT_CPT_PATH
-                        Input checkpoint file (.cpt) to restart a simulation. Use together with '--input_tpr'. Default: None
-  --input_plumed_path INPUT_PLUMED_PATH
-                        Path to the main PLUMED input file (plumed.dat). If provided, PLUMED will be used during the production run. Default: None
-  --input_plumed_folder INPUT_PLUMED_FOLDER
-                        Path to the folder with all files needed by the main PLUMED input file, see input_plumed_path. Default: None
-  --config CONFIG_PATH  Configuration file (YAML)
-  --gmx_bin GMX_BIN     Path to GROMACS binary (gmx for single node and gmx_mpi for multi-node). Default: gmx
-  --mpi_bin MPI_BIN     Path to MPI binary. Default: null
-  --mpi_np MPI_NP       Number of MPI processes given to the mpi_bin. Default: None
-  --num_threads_mpi NUM_THREADS_MPI
-                        Number of MPI threads. Default: 0 (Let GROMACS guess)
-  --num_threads_omp NUM_THREADS_OMP
-                        Number of OpenMP threads. Default: 0 (Let GROMACS guess)
-  --use_gpu             Calculate non-bonding interactions and particle-mesh ewald in GPU by adding '-nb gpu -pme gpu' to mdrun call. If not used, gmx will still use a GPU for these
-                        calculations if available. Default: False
-  --restart             Restart the workflow from the last completed step. Default: False
-  --forcefield FORCEFIELD
-                        Forcefield to use. Default: amber99sb-ildn
-  --ions_concentration IONS_CONCENTRATION
-                        Concentration of ions in the system in mol/L (M). Default: 0.15 M
-  --temp TEMPERATURE    Temperature of the system in K. Default: 300
-  --seed RANDOM_SEED    Random seed for the simulations. If given, new velocities will be generated with this seed. Default: -1
-  --setup_only          Only setup the system. Default: False
-  --skip_restraints     Skip adding chain backbone position restraints to the topology. Only used for input_pdb and input_gro_top modes. Ligand restraints are always added if a ligands
-                        folder is provided. Default: False
-  --skip_solvation      Skip adding simulation box, solvent and ions (editconf, solvate, grompp, genion). Use when the input structure is already solvated. Only used for input_pdb and
-                        input_gro_top modes. Default: False
-  --dt DT               Time step in fs. Default: 2 fs
-  --equil_time EQUIL_TIME
-                        Time of each equilibration step in ns. Default: 1.0 ns
-  --equil_frames EQUIL_FRAMES
-                        Number of frames to save during the equilibration steps. Default: 500 frames
-  --equil_only          Only run the equilibration steps. Default: False
-  --prod_time PROD_TIME
-                        Total time of the production simulation in ns. Default: 100.0 ns
-  --prod_frames PROD_FRAMES
-                        Number of frames to save during the production steps. Default: 2000 frames
-  --remove_raw_traj     Delete the heavy, raw production trajectories after post-processing is complete to save disk space. Default: False
-  --keep_solvent        Keep solvent and ions in the final post-processed trajectory. Default: False
-  --keep_residues RESIDUES_TO_KEEP [RESIDUES_TO_KEEP ...]
-                        List of specific residue indices to keep in the final post-processed trajectory (e.g., --keep_residues 15 23 105). Default: None
-  --debug               Activate debug mode with more verbose logging. Default: False
-  --output OUTPUT_PATH  Output path. Default: 'output' in the current working directory
-```
+Run a full GROMACS MD pipeline — system setup, equilibration, production, and trajectory post-processing — starting from a prepared PDB or from pre-built structure/topology files.
 
 ## Description
 
-This workflow has several steps. The input for the workflow can be (1) a prepared PDB file or (2) a gromacs structure file and .zip topology files ready to be minimized.
+**Input modes** (mutually exclusive, resolved at runtime):
 
-3. **Preparation of topology and coordinates for MD**
+- `--input_pdb` — build the system from a prepared PDB (runs `pdb2gmx`).
+- `--input_gro` + `--input_top` — start from a pre-built structure (`.gro`) and topology (`.zip`), skipping `pdb2gmx`.
+- `--input_tpr` + `--input_cpt` — resume a simulation from a checkpoint.
 
-    A. **pdb2gmx** 
-    Uses pdb2gmx to obtain a gromacs structure file (.gro) and topology file from the fixed PDB. Hydrogen atoms will be added in this step, one can choose to ignore the hydrogens in the original structure or not (```ignh``` property). The protonation state of histidines can be provided (```his``` property) in the form of a list of numbers see below. A force field and water model are chosen here.
-    
-    For the ```his``` property include a string with the protonation states '0 0 1 1 0 0 0', where:
+Ligand topologies produced by `ligand_parameterization` can be added with `--ligands_folder`.
 
-        - 0 : H on ND1 only (HID)
-        - 1 : H on NE2 only (HIE)
-        - 2 : H on ND1 and NE2 (HIP)
-        - 3 : Coupled to Heme (HIS1)
-    
-    NOTE: default behavior is to add charged termini - if one wants ACE and NME it should be provided already with the correct atom names - look at the force field being used: /eb/x86_64/software/GROMACS/2023.3-foss-2022a-CUDA-11.7.0-PLUMED-2.9.0/share/gromacs/top/amber99sb-ildn.ff/aminoacids.rtp
-    
-    NOTE: this will be automatized within the workflow in the future, right now pdb4amber can be used externally to obtain a guess
+**Pipeline sections:**
 
-    B. **Generate cofactors topology**: if there are any cofactors with parameters in the `--ligand_parameters` folder, use _tleap_ to build the corresponding AMBER topology and coordinates file.
+1. **Setup** — `pdb2gmx`, ligand insertion + restraints, simulation box, solvation, and ion generation. Skip solvation for an already-solvated input with `--skip_solvation`; skip backbone restraints with `--skip_restraints`. Stop here with `--setup_only`.
+2. **Equilibration** — energy minimization, then NVT and NPT equilibration with position restraints on solute heavy atoms. Stop after this with `--equil_only`.
+3. **Production** — production `mdrun` from the equilibrated structure. If `--input_plumed_path` (and optionally `--input_plumed_folder`) is given, the run uses PLUMED.
+4. **Analysis & post-processing** — RMSD, radius of gyration, and RMSF, followed by trajectory cleanup (dry/center/image/fit), shared with `traj_postprocessing`.
 
-    C. **Convert AMBER topology and coordinates to GMX**: convert AMBER topology and coordinate files to GROMACS format.
+**Execution:** single-node (`gmx` with thread-MPI/OpenMP) or multi-node (`gmx_mpi` with `--mpi_bin`/`--mpi_np`, e.g. `srun`/`mpirun`). GPU offload is enabled with `--use_gpu`.
 
-    D-F: **Merge cofactors and structure**: if any parameterized cofactors are present, convert the structures to PDB format and concatenate them.
+## Usage
 
-    G-H. **Generate restraints for cofactor heavy atoms**.
+```bash
+conda activate biobb_md
+# From a prepared PDB, 100 ns
+md_gromacs --input_pdb structure.pdb --prod_time 100 --temp 300 --output output
 
-    I. **Append cofactor topology to structure topology**.
+# From pre-built GROMACS files, using the GPU
+md_gromacs --input_gro system.gro --input_top system.zip --use_gpu --output output
+```
 
-    J. **Generate simulation box** 
-    Generate a simulation box around the structure. Some box types are more efficient than others (octahedron for globular proteins)
+The `config.yml` is auto-generated from the CLI arguments into `--output`. `--restart` resumes from the last completed step. Run `md_gromacs --help` for the full option list.
 
-    K. **Solvation** 
-    Generate a box of solvent around the structure.
+## Options
 
-    L-M. **Add ions** 
-    Randomly replace solvent molecules with monoatomic ions. 
+### Inputs
 
-    N. **Convert final topology to PDB**
-    This will be used in subsequent post-processing steps.
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--input_pdb` | `None` | Prepared PDB; protonation is taken from the residue names. |
+| `--input_gro` | `None` | Input structure (`.gro`); use with `--input_top`. |
+| `--input_top` | `None` | Input compressed topology (`.zip`); use with `--input_gro`. |
+| `--input_tpr` | `None` | `.tpr` to restart a simulation; use with `--input_cpt`. |
+| `--input_cpt` | `None` | `.cpt` checkpoint; use with `--input_tpr`. |
+| `--ligands_folder` | `None` | Folder of ligand `.itp` + `.gro` files to include. |
+| `--input_plumed_path` | `None` | Main PLUMED input file; enables PLUMED in production. |
+| `--input_plumed_folder` | `None` | Folder of files referenced by the PLUMED input. |
 
-To prepare the system externally, use the ```--input_gro``` and ```--input_top``` command line arguments.
+### Execution
 
-To make sure the system has been correctly prepared before minimizing or running MD, launch the workflow adding the ```--setup_only``` command line option. This will stop the workflow before the energy minimization. 
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--gmx_bin` | `gmx` | GROMACS binary (`gmx` single-node, `gmx_mpi` multi-node). |
+| `--mpi_bin` | `null` | MPI binary path (e.g. `srun`, `mpirun`). |
+| `--mpi_np` | `None` | Number of MPI processes for `mpi_bin`. |
+| `--num_threads_mpi` | `0` | thread-MPI ranks (`0` = let GROMACS guess). |
+| `--num_threads_omp` | `0` | OpenMP threads (`0` = let GROMACS guess). |
+| `--use_gpu` | `False` | Add `-nb gpu -pme gpu` to `mdrun`. |
+| `--debug` | `False` | Verbose logging and keep temporary files. |
 
-4. **Minimize and equilibrate the initial configuration**
+### Simulation
 
-    A-D. **Energy minimization** (including position restraints on protein/DNA heavy atoms)
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--forcefield` | `amber99sb-ildn` | pdb2gmx force field. Available force fields depend on the GROMACS version |
+| `--ions_concentration` | `0.15` | Salt concentration (mol/L). |
+| `--temp` | `300` | Temperature (K). |
+| `--seed` | `-1` | Velocity-generation random seed (`-1` = random). |
+| `--dt` | `2` | Time step (fs; 1–4). |
+| `--equil_time` | `1.0` | Time per equilibration step (ns). |
+| `--equil_frames` | `500` | Frames saved during equilibration. |
+| `--prod_time` | `100.0` | Total production time (ns). |
+| `--prod_frames` | `2000` | Frames saved during production. |
+| `--setup_only` | `False` | Only set up the system (stop before minimization). |
+| `--equil_only` | `False` | Only run setup + equilibration. |
+| `--skip_restraints` | `False` | Skip backbone position restraints (input_pdb / input_gro+top modes). |
+| `--skip_solvation` | `False` | Skip box/solvent/ions (input already solvated). |
+| `--remove_raw_traj` | `False` | Delete raw production trajectories after post-processing. |
+| `--keep_solvent` | `False` | Keep solvent and ions in the post-processed trajectory. |
+| `--keep_residues` | `None` | Extra residue indices to keep in the post-processed trajectory (e.g. `15 23 105`). |
+| `--restart` | `False` | Restart from the last completed step. |
+| `--output` | `output` | Output directory. |
 
-    E-G. **NVT equilibration** (including position restraints on protein/DNA heavy atoms)
+## Outputs
 
-    H-J. **NPT equilibration** (including position restraints on protein/DNA heavy atoms)
+Written into `--output`, organized by section:
 
-5. **Production run**
-
-    Launch several production trajectories from equilibrated structure (see `--num_parts` or `--num_replica` command line argument).
-
-6. **Basic analysis**
-
-    Computation of RMSD (with fitting) with respect to experimental structure and with respect to equilibrated structure (protein backbone atoms). Computation of Radius of gyration (protein backbone atoms) and RMSF (protein heavy atoms).
-
-7. **Post-processing**
-
-    Image, dry and fitting.
-
-Note that re-launching the workflow will skip the previously successful steps if restart is True and the output folder is the same. 
-
+- `1_setup/`, `2_equil/`, `3_prod/`, `4_analysis/` — per-section working directories.
+- Post-processed trajectory and structure under `4_analysis/` (e.g. `fitted_traj.xtc`, `dry_structure.pdb`), plus the RMSD/Rgyr/RMSF analysis outputs.
+- `config.yml` and `log.out` for inspection.

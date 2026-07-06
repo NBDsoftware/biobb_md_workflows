@@ -31,10 +31,10 @@ Once installed, each workflow is available as a CLI command:
 
 | Command | Workflow |
 |---------|----------|
-| `protein_preparation` | Protein preparation |
-| `ligand_parameterization` | Ligand parameterization |
-| `md_gromacs` | Molecular dynamics with GROMACS |
-| `traj_postprocessing` | Trajectory post-processing |
+| `protein_preparation` | [Protein preparation](biobb_md_workflows/protein_preparation/README.md) |
+| `ligand_parameterization` | [Ligand parameterization](biobb_md_workflows/ligand_parameterization/README.md) |
+| `md_gromacs` | [Molecular dynamics with GROMACS](biobb_md_workflows/md_gromacs/README.md) |
+| `traj_postprocessing` | [Trajectory post-processing](biobb_md_workflows/traj_postprocessing/README.md) |
 
 ```bash
 protein_preparation --help
