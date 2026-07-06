@@ -378,17 +378,17 @@ def create_config_file(output_path: str,
 def ligand_parameterization(
             input_pdb_path: str,
             forcefields: List[str] = ['protein.ff14SB', 'DNA.bsc1', 'gaff'],
-            ligand_names: Union[List[str], None] = None, 
-            charges: Union[List[str], None] = None, 
+            ligand_names: Optional[List[str]] = None, 
+            charges: Optional[List[str]] = None, 
             chains: List[str] = ['A'], 
             model: int = 0, 
             format: Literal['gromacs', 'amber'] = 'gromacs', 
-            custom_parameters: Union[str, None] = None,
+            custom_parameters: Optional[str] = None,
             protonation_tool: Literal['ambertools', 'obabel', 'none'] = 'ambertools', 
             skip_min: bool = False, 
             restart: bool = False,
-            output_top_path: Union[str, None] = None, 
-            output_path: Union[str, None] = None
+            output_top_path: Optional[str] = None, 
+            output_path: Optional[str] = None
     ):
     '''
     Ligand parameterization workflow using BioExcel Building Blocks.
