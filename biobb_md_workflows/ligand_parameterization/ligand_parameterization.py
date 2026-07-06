@@ -261,9 +261,9 @@ def config_contents(
 # Global properties (common for all steps)
 global_properties:
   working_dir_path: output                         # Workflow default output directory
-  can_write_console_log: False                     # Verbose writing of log information
+  can_write_console_log: false                     # Verbose writing of log information
   restart: {to_yaml(restart)}                      # Skip steps already performed
-  remove_tmp: True
+  remove_tmp: true
 
 # Step 1: extract heteroatoms from input PDB file
 step1_ligand_extraction:
@@ -302,7 +302,7 @@ step2B_ambertools_reduce:
     input_path: dependency/step1_ligand_extraction/output_heteroatom_path
     output_path: ligand_reduced.pdb
   properties:
-    charges: True
+    charges: true
 
 step2B_obabel_reduce:
   tool: babel_add_hydrogens
@@ -322,7 +322,7 @@ step3B_babel_minimize:
     criteria: 1e-6
     method: sd
     force_field: GAFF
-    hydrogens: False
+    hydrogens: false
 
 step4B_acpype_params_gmx:
   tool: acpype_params_gmx

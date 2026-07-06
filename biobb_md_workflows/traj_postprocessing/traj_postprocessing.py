@@ -157,7 +157,7 @@ def common_config_contents(
     return f"""
 # Global properties (common for all steps)
 global_properties:
-  can_write_console_log: False
+  can_write_console_log: false
   restart: {to_yaml(restart)}
   remove_tmp: {to_yaml(not debug)}
 
@@ -222,7 +222,7 @@ step4_dry_str:
   properties:
     binary_path: {gmx_bin}     
     selection: "{solute_group}"
-    center: False
+    center: false
     pbc: none
     
 # Step 5 (Center group creation) is done in Python after extracting the 
@@ -258,7 +258,7 @@ step7_whole:
   properties:
     binary_path: {gmx_bin}
     output_selection: "{output_group}"
-    center: False
+    center: false
     pbc: whole
 
 # Cluster the molecules
@@ -273,7 +273,7 @@ step8_cluster:
     binary_path: {gmx_bin}
     output_selection: "{output_group}"
     cluster_selection: "{solute_group}"
-    center: False
+    center: false
     pbc: cluster
 
 # Extract the first frame to use as ref
@@ -300,7 +300,7 @@ step10_nojump:
   properties:
     binary_path: {gmx_bin}
     output_selection: "{output_group}"
-    center: False
+    center: false
     pbc: nojump
 
 # Center the system - whole solute group / central atom
@@ -315,7 +315,7 @@ step11_center:
     binary_path: {gmx_bin}
     output_selection: "{output_group}"
     center_selection: "Center"
-    center: True
+    center: true
     ur: compact
     pbc: none
 
@@ -330,7 +330,7 @@ step12_image:
   properties:
     binary_path: {gmx_bin}
     output_selection: "{output_group}"
-    center: False
+    center: false
     ur: compact
     pbc: mol
 
@@ -346,7 +346,7 @@ step13_fit:
     binary_path: {gmx_bin}
     fit_selection: "{solute_group}"
     output_selection: "{output_group}"
-    center: False
+    center: false
     fit: rot+trans
 """
 
@@ -367,7 +367,7 @@ step7_center:
     binary_path: {gmx_bin}
     center_selection: "Center"
     output_selection: "{output_group}"
-    center: True
+    center: true
     ur: compact
     pbc: none
 
@@ -382,7 +382,7 @@ step8_image:
   properties:
     binary_path: {gmx_bin}
     output_selection: "{output_group}"
-    center: False
+    center: false
     ur: compact
     pbc: mol
 
@@ -398,7 +398,7 @@ step9_fit:
     binary_path: {gmx_bin}
     fit_selection: "{solute_group}"
     output_selection: "{output_group}"
-    center: False
+    center: false
     fit: rot+trans
 """
 

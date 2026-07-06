@@ -716,9 +716,9 @@ def config_contents(
 # Global properties (common for all steps)
 global_properties:
   working_dir_path: output                                          # Workflow default output directory
-  can_write_console_log: False                                      # Verbose writing of log information
+  can_write_console_log: false                                      # Verbose writing of log information
   restart: {to_yaml(restart)}                                       # Skip steps already performed
-  remove_tmp: True                                                  # Remove temporal files
+  remove_tmp: true                                                  # Remove temporal files
 
 # Step 1: extract atoms from input PDB file
 step1_extractAtoms:
@@ -767,7 +767,7 @@ step5_pdb_tofasta:
     input_file_path: dependency/step1_extractAtoms/input_structure_path
     output_file_path: pdbFasta.fasta
   properties:
-    multi: True
+    multi: true
 
 # Step 2 D: Model missing backbone atoms with biobb_structure_checking and the Modeller suite
 # It requires a MODELLER license 
@@ -778,7 +778,7 @@ step6_fixbackbone:
     input_fasta_canonical_sequence_path: dependency/step4_canonical_fasta/output_fasta_path
     output_pdb_path: fixbackbone.pdb
   properties:
-    add_caps: {cap_ter}
+    add_caps: {to_yaml(cap_ter)}
     modeller_key : {to_yaml(modeller_key)}
 
 # Step 2 E: Model missing side chain atoms with biobb_structure_checking and the Modeller suite (if key property is given)
@@ -798,8 +798,8 @@ step8_renumberstructure:
     output_structure_path: renumbered.pdb
     output_mapping_json_path: mapping.json
   properties:
-    renumber_residues: True
-    renumber_residues_per_chain: False
+    renumber_residues: true
+    renumber_residues_per_chain: false
 
 # Step 2 G: Flip clashing amides with biobb_structure_checking and the Modeller suite
 # Optional step (activate from command line with --fix_amides)
@@ -848,7 +848,7 @@ step14_his_hbonds:
     input_pdb_path: dependency/step12_remove_hs/output_path
     output_pdb_path: his_hbonds.pdb
   properties:
-    reduce: True
+    reduce: true
 
 # Rename titratable residues according to protonation state
 step15_titrate:
@@ -867,7 +867,7 @@ step16_pdb4amber:
     input_pdb_path: dependency/step15_titrate/output_structure_path
     output_pdb_path: pdb4amber.pdb
   properties:
-    reduce: True
+    reduce: true
 """
 
 def create_config_file(output_path: str,

@@ -924,7 +924,7 @@ def config_contents(
     return f"""
 # Global properties (common for all steps)
 global_properties:
-  can_write_console_log: False                                      # Verbose writing of log information
+  can_write_console_log: false                                      # Verbose writing of log information
   restart: {to_yaml(restart)}                                       # Skip steps already performed
   working_dir_path: output                                          # Workflow default output directory
   remove_tmp: {to_yaml(not debug)}                                  # Remove temporal files
@@ -944,8 +944,8 @@ step1_pdb2gmx:
     binary_path: {gmx_bin}    
     force_field: {forcefield}     # Will be set by the workflow
     water_type: tip3p             # spc, spce, tip3p, tip4p, tip5p, tips3p
-    ignh: False                   # Ignore hydrogens in the input structure
-    merge: False                  # Merge all chains into one molecule
+    ignh: false                   # Ignore hydrogens in the input structure
+    merge: false                  # Merge all chains into one molecule
 
 # Add the reference group to the index file
 step2_make_ref_group:
@@ -1071,7 +1071,7 @@ step9_genion:
     output_gro_path: genion.gro
   properties:
     binary_path: {gmx_bin}    
-    neutral: True                 # Neutralize charge of the system
+    neutral: true                 # Neutralize charge of the system
     concentration: {ions_concentration}    # Concentration of ions in mols/L
 
 #################################################################
@@ -1231,7 +1231,7 @@ step11_mdrun_npt:
   properties: 
     binary_path: {gmx_bin}     
     mpi_bin: {mpi_bin}               
-    use_gpu: {use_gpu}
+    use_gpu: {to_yaml(use_gpu)}
     {num_threads_mpi_config}
     {num_threads_omp_config}
     {mpi_np_config}
@@ -1297,7 +1297,7 @@ step2_mdrun_prod:
   properties:
     binary_path: {gmx_bin}     
     mpi_bin: {mpi_bin}               
-    use_gpu: {use_gpu}
+    use_gpu: {to_yaml(use_gpu)}
     {num_threads_mpi_config}
     {num_threads_omp_config}
     {mpi_np_config}
@@ -1370,7 +1370,7 @@ step6_dry_str:
   properties:
     binary_path: {gmx_bin}     
     selection: "{output_group}"
-    center: True
+    center: true
     pbc: mol
     ur: compact
     
@@ -1396,7 +1396,7 @@ step8_center:
     binary_path: {gmx_bin}     
     center_selection: "Center"
     output_selection: "{output_group}"
-    center: True
+    center: true
     ur: compact
     pbc: none
 
@@ -1410,7 +1410,7 @@ step9_image_traj:
   properties:
     binary_path: {gmx_bin}     
     output_selection: "{output_group}"
-    center: False
+    center: false
     ur: compact
     pbc: mol
 
@@ -1425,7 +1425,7 @@ step10_fit_traj:
     binary_path: {gmx_bin}     
     fit_selection: "{solute_group}"
     output_selection: "{output_group}"
-    center: False
+    center: false
     fit: rot+trans
 """
 
