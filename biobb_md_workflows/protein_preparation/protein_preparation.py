@@ -1200,7 +1200,7 @@ def protein_preparation(
 
 def main():
 
-    parser = argparse.ArgumentParser("MD Simulation with GROMACS")
+    parser = argparse.ArgumentParser("Protein preparation with biobb_structure_checking and Modeller")
 
     parser.add_argument('--input_pdb', dest='input_pdb_path', type=str,
                         help="Input PDB file.",

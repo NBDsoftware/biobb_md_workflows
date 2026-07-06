@@ -612,7 +612,7 @@ def ligand_parameterization(
 
 def main():
     
-    parser = argparse.ArgumentParser(description="Ligand parameterization for AMBER or GROMACS")
+    parser = argparse.ArgumentParser(description="Ligand parameterization with custom parameters or ambertools + GAFF")
 
     parser.add_argument('--input_pdb', dest='input_pdb',
                         help='Path to the input PDB file with the ligands to parameterize.', 
