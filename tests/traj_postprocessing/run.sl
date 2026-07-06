@@ -24,10 +24,10 @@ unset PYTHONPATH
 
 # Input files
 # WARNING: This test requires an external raw trajectory not contained in the repository
-INPUT_FOLDER=/path/to/MD/simulation/
+INPUT_FOLDER=/shared/work/projects/MDDB/ModTox/trajectories/CYPs/output_1eqg/
 INPUT_TPR=$INPUT_FOLDER/topology.tpr
 INPUT_XTC=$INPUT_FOLDER/raw_md_1_part0.xtc
-INPUT_STR=/path/to/topology/topology.pdb
+INPUT_STR=/shared/work/projects/MDDB/ModTox/biobb_workflow_outputs/CYPs/output_1eqg_rep2/step3N_gro2pdb/topology.pdb
 
 OUTPUT_PATH=output
 OUTPUT_TRAJ=trajectory.xtc
