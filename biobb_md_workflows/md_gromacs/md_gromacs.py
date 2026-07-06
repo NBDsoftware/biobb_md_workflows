@@ -35,6 +35,8 @@ from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
 from biobb_analysis.ambertools.cpptraj_rmsf import cpptraj_rmsf 
 from biobb_structure_utils.utils.cat_pdb import cat_pdb
 
+from biobb_md_workflows.common import to_yaml
+
 # Constants
 # Titratable residues in GROMACS, HIS are already set with their resnames
 # 'HIS': ('HISD', 'HISE', 'HISH', 'HIS1')
@@ -801,17 +803,16 @@ def config_contents(
     input_gro_path: Optional[str] = None,
     input_top_path: Optional[str] = None,
     seed: Optional[int] = -1,
-    solvent_selection: str = '"SOL" | "Ion"', 
+    solvent_selection: str = '"SOL" | "Ion"',
     solvent_group: str = 'SOL_Ion',
     solute_group: str = 'Protein',
-    keep_solvent: bool = False,
-    residues_to_keep: Optional[List[int]] = None,
+    output_selection: str = '"Protein"',
     debug: bool = False,
     ) -> str:
     """
     Returns the contents of the YAML configuration file as a string.
-    
-    The YAML file contains the configuration for the protein preparation workflow.
+
+    The YAML file contains the configuration for the GROMACS MD workflow.
     
     Parameters
     ----------
@@ -855,10 +856,8 @@ def config_contents(
         GROMACS group string including all solvent and ion molecules to use in the Temperature coupling and post-processing
     solute_group: str
         GROMACS group string including all solute molecules to use in the Temperature coupling and post-processing
-    keep_solvent: bool
-        Keep solvent and ions in the final post-processed trajectory.
-    residues_to_keep:
-        List of specific residue indices to keep in the final post-processed trajectory besides the solute
+    output_selection: str
+        GROMACS selection string for the group to keep in the final post-processed trajectory (built in the workflow body)
     debug: bool
         Avoid removing temporal files for debugging purposes
 
@@ -910,17 +909,8 @@ def config_contents(
     
     if seed is None:
         seed = -1
-        
-    # Define the output group selection based on the input arguments
-    if keep_solvent:
-        output_selection = f'"System"'
-    elif residues_to_keep:
-        residues_selection = f"ri {' '.join([str(res) for res in residues_to_keep])}"
-        output_selection = f'"{solute_group}" | {residues_selection}'
-    else:
-        output_selection = f'"{solute_group}"'
-    
-    # Set default paths for input gro and top files if not provided. 
+
+    # Set default paths for input gro and top files if not provided.
     # Otherwise convert to absolute paths to avoid changes by the config reader
     if input_gro_path:
         input_gro_path = os.path.abspath(input_gro_path)
@@ -931,13 +921,13 @@ def config_contents(
     else:
         input_top_path = "dependency/step1_pdb2gmx/output_top_zip_path"
 
-    return f""" 
+    return f"""
 # Global properties (common for all steps)
-global_properties:                                       # Workflow default output directory
+global_properties:
   can_write_console_log: False                                      # Verbose writing of log information
-  restart: {restart}              
-  working_dir_path: output                                     # Skip steps already performed
-  remove_tmp: {not debug}                                           # Remove temporal files
+  restart: {to_yaml(restart)}                                       # Skip steps already performed
+  working_dir_path: output                                          # Workflow default output directory
+  remove_tmp: {to_yaml(not debug)}                                  # Remove temporal files
 
 ######################################################
 # Section 1: Prepare topology and coordinates for MD #
@@ -1439,35 +1429,32 @@ step10_fit_traj:
     fit: rot+trans
 """
 
-def create_config_file(output_path: str, 
-                       input_mode: Literal['input_pdb', 'input_gro_top', 'restart_simulation'], 
+def create_config_file(output_path: str,
                        **config_args) -> str:
     """
     Create a YAML configuration file for the workflow in the output path.
     Return the path to the configuration file.
-    
+
     Parameters
     ----------
     output_path : str
         Path to the output folder
     config_args : dict
         Arguments to be used in the configuration file.
-    
+
     Returns
     -------
-    
+
     str
         Path to configuration file
     """
-    
+
     config_path = os.path.join(output_path, 'config.yml')
-    
+
     # Write the contents to the file
     with open(config_path, 'w') as f:
-        f.write(config_contents(input_mode, **config_args))
-        
-    print(f"Configuration file created at {config_path}.")
-    
+        f.write(config_contents(**config_args))
+
     return config_path
     
   
@@ -1636,9 +1623,19 @@ def md_gromacs(
     # Validate that user-requested residues actually exist in the structure
     if residues_to_keep:
         check_residues_exist(input_pdb_path, residues_to_keep, global_log)
-    
+
+    # Build the output group selection for the final post-processed trajectory
+    if keep_solvent:
+        output_selection = '"System"'
+    elif residues_to_keep:
+        residues_selection = f"ri {' '.join(str(res) for res in residues_to_keep)}"
+        output_selection = f'"{solute_group}" | {residues_selection}'
+    else:
+        output_selection = f'"{solute_group}"'
+
     # Create the configuration file
     config_args = {
+        'input_mode': input_mode,
         'gmx_bin': gmx_bin,
         'mpi_bin': mpi_bin,
         'mpi_np': mpi_np,
@@ -1657,15 +1654,14 @@ def md_gromacs(
         'prod_frames': prod_frames,
         'input_gro_path': input_gro_path,
         'input_top_path': input_top_path,
-        'solvent_selection': solvent_selection, 
+        'solvent_selection': solvent_selection,
         'solvent_group': solvent_group,
         'solute_group': solute_group,
-        'keep_solvent': keep_solvent,
-        'residues_to_keep': residues_to_keep,
+        'output_selection': output_selection,
         'debug': debug
     }
-    configuration_path = create_config_file(output_path, input_mode, **config_args)
-    conf = settings.ConfReader(configuration_path)
+    configuration_path = create_config_file(output_path, **config_args)
+    conf = settings.ConfReader(config=configuration_path)
     conf.working_dir_path = output_path
 
     # Parsing the input configuration file (YAML);
@@ -1691,7 +1687,6 @@ def md_gromacs(
 
         if input_mode == 'input_pdb':
             setup_paths["step1_pdb2gmx"]["input_pdb_path"] = input_pdb_path
-            setup_prop["step1_pdb2gmx"]["force_field"] = forcefield
             global_log.info(f"step1_pdb2gmx: Reading protonation states for titratable residues (0: deprotonated, 1: protonated)")
             for residue in gmx_titra_resnames.keys():
                 # Determine protonation state of titratable residues from resname in the input PDB file
@@ -1853,7 +1848,6 @@ def md_gromacs(
 
             # STEP 9: ion generation
             global_log.info("step9_genion: Ion generation")
-            setup_prop["step9_genion"]["concentration"] = ions_concentration
             genion(**setup_paths["step9_genion"], properties=setup_prop["step9_genion"])
 
             input_gro_path = setup_paths["step9_genion"]["output_gro_path"]

@@ -11,6 +11,9 @@ from Bio.PDB import PDBParser
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
+
+from biobb_md_workflows.common import to_yaml
+
 from biobb_gromacs.gromacs.make_ndx import make_ndx
 from biobb_gromacs.gromacs.editconf import editconf
 from biobb_analysis.gromacs.gmx_image import gmx_image
@@ -147,15 +150,16 @@ def common_config_contents(
     output_selection: str = f'"{solute_group}"',
     structure_path: str = '',
     input_topology_path: str = '',
-    input_traj_path: str = ''
-    
+    input_traj_path: str = '',
+    restart: bool = False
+
 ) -> str:
     return f"""
 # Global properties (common for all steps)
 global_properties:
   can_write_console_log: False
-  restart: True
-  remove_tmp: {not debug}
+  restart: {to_yaml(restart)}
+  remove_tmp: {to_yaml(not debug)}
 
 ###################################################
 # Section 1: Index group creation from structure  #
@@ -406,16 +410,18 @@ def config_contents(
     structure_path: str = '',
     input_topology_path: str = '',
     input_traj_path: str = '',
-    fast: bool = False
+    fast: bool = False,
+    restart: bool = False
 ) -> str:
-    common_contents = common_config_contents(gmx_bin, 
-                                            debug, 
-                                            solvent_selection, 
-                                            output_selection, 
-                                            structure_path, 
+    common_contents = common_config_contents(gmx_bin,
+                                            debug,
+                                            solvent_selection,
+                                            output_selection,
+                                            structure_path,
                                             input_topology_path,
-                                            input_traj_path)
-    
+                                            input_traj_path,
+                                            restart)
+
     if fast:
         return common_contents + fast_postprocessing(gmx_bin, input_topology_path)
     else:
@@ -440,6 +446,7 @@ def traj_postprocessing(
     extra_solvents: List[str] = [],
     fast: bool = False,
     debug: bool = False,
+    restart: bool = False,
     output_path: str = 'output',
     output_traj_path='trajectory.xtc',
     output_str_path='structure.pdb'
@@ -485,7 +492,7 @@ def traj_postprocessing(
     start_time = time.time()
 
     # Determine final output path
-    output_path = fu.get_working_dir_path(output_path, restart=True)
+    output_path = fu.get_working_dir_path(output_path, restart=restart)
 
     # Initialize a global log file
     global_log, _ = fu.get_logs(path=output_path, light_format=True)
@@ -529,7 +536,8 @@ def traj_postprocessing(
         structure_path=input_structure_path,
         input_topology_path=input_topology_path,
         input_traj_path=input_traj_path,
-        fast=fast
+        fast=fast,
+        restart=restart
     )
     global_log.info(f"Configuration file: {config_path}")
 
@@ -748,6 +756,10 @@ def main():
         help="Keep intermediate files. Default: False"
     )
     parser.add_argument(
+        '--restart', action='store_true', required=False, default=False,
+        help="Restart the workflow from the last completed step. Default: False"
+    )
+    parser.add_argument(
         '--output', dest='output_path', type=str, required=False, default='output',
         help="Output directory path for the workflow where the steps will be written. Default: output"
     )
@@ -773,6 +785,7 @@ def main():
         extra_solvents=args.extra_solvents,
         fast = args.fast,
         debug=args.debug,
+        restart=args.restart,
         output_path=args.output_path,
         output_traj_path=args.output_traj_path,
         output_str_path=args.output_str_path

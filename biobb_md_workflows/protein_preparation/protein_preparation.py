@@ -15,6 +15,8 @@ from Bio import SeqIO
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
+
+from biobb_md_workflows.common import to_yaml
 from biobb_io.api.canonical_fasta import canonical_fasta
 from biobb_model.model.fix_backbone import fix_backbone
 from biobb_model.model.fix_side_chain import fix_side_chain
@@ -679,13 +681,14 @@ def config_contents(
     cap_ter: bool = False,
     pH: float = 7.0,
     his: Optional[List] = None,
-    output_format: Literal['amber', 'gromacs'] = 'amber'
+    output_format: Literal['amber', 'gromacs'] = 'amber',
+    restart: bool = False
     ) -> str:
     """
     Returns the contents of the YAML configuration file as a string.
-    
+
     The YAML file contains the configuration for the protein preparation workflow.
-    
+
     Returns
     -------
     str
@@ -698,30 +701,23 @@ def config_contents(
     # If chains are given as argument
     if pdb_chains is not None:
         molecule_type = "chains"
-        step1_chains_property = f"chains : {pdb_chains}"
+        step1_chains_property = f"chains : {to_yaml(pdb_chains)}"
 
-    step2_modkey_prop = ""
-    step3_properties = ""
+    # Only emitted when mutations are requested (the mutate tool has no null default)
     step3_mutations_property = ""
-    step3_modkey_prop = ""
-    step3_modkey_prop = ""
-
     if mutation_list is not None:
-        step3_properties = "properties:"
         step3_mutations_property = f"mutation_list : {','.join(mutation_list)}"
 
-    if modeller_key is not None:
-        step2_modkey_prop = f"modeller_key : {modeller_key}"
-        step3_properties = "properties:"
-        step3_modkey_prop = f"modeller_key : {modeller_key}"
-        step3_usemod_prop = f"use_modeller : true" 
-        
-    return f""" 
+    # Modeller key is injected into every step that supports it (null when not given);
+    # use_modeller is enabled only where a key is available.
+    use_modeller = to_yaml(modeller_key is not None)
+
+    return f"""
 # Global properties (common for all steps)
 global_properties:
   working_dir_path: output                                          # Workflow default output directory
   can_write_console_log: False                                      # Verbose writing of log information
-  restart: True                                                     # Skip steps already performed
+  restart: {to_yaml(restart)}                                       # Skip steps already performed
   remove_tmp: True                                                  # Remove temporal files
 
 # Step 1: extract atoms from input PDB file
@@ -735,14 +731,14 @@ step1_extractAtoms:
     {step1_chains_property}
 
 # Step 2: fix alternative locations of residues if any with biobb_structure_checking and the Modeller suite (if key property is given)
-step2_fixaltlocs:                 
+step2_fixaltlocs:
   tool: fix_altlocs
   paths:
     input_pdb_path: dependency/step1_extractAtoms/output_molecule_path
     output_pdb_path: fixaltlocs.pdb
   properties:
-    altlocs: null                                                    # Format: ["Chain Residue_number:Altloc"], e.g. # ["A339:A", "A171:B", "A768:A"]                       # MODELLER license key
-    {step2_modkey_prop}
+    altlocs: null                                                    # Format: ["Chain Residue_number:Altloc"], e.g. # ["A339:A", "A171:B", "A768:A"]
+    modeller_key : {to_yaml(modeller_key)}                           # MODELLER license key
 
 # Step 3: Mutate residues in the structure if needed
 step3_mutations:
@@ -750,10 +746,10 @@ step3_mutations:
   paths:
     input_pdb_path: dependency/step2_fixaltlocs/output_pdb_path
     output_pdb_path: mutated.pdb
-  {step3_properties}
+  properties:
     {step3_mutations_property}
-    {step3_modkey_prop}
-    {step3_usemod_prop}
+    modeller_key : {to_yaml(modeller_key)}
+    use_modeller : {use_modeller}
 
 # Step 4: Download a FASTA file with the canonical sequence of the protein
 # It requires internet connection and a PDB code
@@ -762,7 +758,7 @@ step4_canonical_fasta:
   paths:
     output_fasta_path: canonicalFasta.fasta
   properties:
-    pdb_code: null                                                    # Will be set at runtime
+    pdb_code: null                                                    # Resolved at runtime (user arg or PDB header)
 
 # Step 2 C: Extract the residue sequence from the PDB file to FASTA format
 step5_pdb_tofasta:
@@ -783,6 +779,7 @@ step6_fixbackbone:
     output_pdb_path: fixbackbone.pdb
   properties:
     add_caps: {cap_ter}
+    modeller_key : {to_yaml(modeller_key)}
 
 # Step 2 E: Model missing side chain atoms with biobb_structure_checking and the Modeller suite (if key property is given)
 step7_fixsidechain:
@@ -790,6 +787,9 @@ step7_fixsidechain:
   paths:
     input_pdb_path: dependency/step6_fixbackbone/output_pdb_path
     output_pdb_path: fixsidechain.pdb
+  properties:
+    modeller_key : {to_yaml(modeller_key)}
+    use_modeller : {use_modeller}
 
 step8_renumberstructure:
   tool: renumber_structure
@@ -808,12 +808,16 @@ step9_fixamides:
   paths:
     input_pdb_path: dependency/step8_renumberstructure/output_structure_path
     output_pdb_path: fixamides.pdb
+  properties:
+    modeller_key : {to_yaml(modeller_key)}
 
 step10_fixchirality:
   tool: fix_chirality
   paths:
     input_pdb_path: dependency/step9_fixamides/output_pdb_path
     output_pdb_path: fixchirality.pdb
+  properties:
+    modeller_key : {to_yaml(modeller_key)}
 
 # Step 2 F: Fix disulfide bonds with biobb_structure_checking (CYS -> CYX for cysteines involved in disulfide bonds)
 # Optional step (activate from command line with --fix_ss)
@@ -822,8 +826,8 @@ step11_fixssbonds:
   paths:
     input_pdb_path: dependency/step10_fixchirality/output_pdb_path
     output_pdb_path: fixssbonds.pdb
-  # properties:
-    # modeller_key: HERE YOUR MODELLER KEY  # MODELLER license key
+  properties:
+    modeller_key : {to_yaml(modeller_key)}  # MODELLER license key
 
 step12_remove_hs:
   tool: remove_hydrogens
@@ -853,7 +857,7 @@ step15_titrate:
     output_structure_path: titrate.pdb
   properties:
     pH: {pH}
-    his: {his}
+    his: {to_yaml(his)}
     pdb_format: {output_format}
 
 # Put back hydrogens
@@ -891,11 +895,9 @@ def create_config_file(output_path: str,
     # Write the contents to the file
     with open(config_path, 'w') as f:
         f.write(config_contents(**config_args))
-        
-    print(f"Configuration file created at {config_path}.")
 
     return config_path
-    
+
 # Main workflow
 def protein_preparation(
     input_pdb_path: str,
@@ -988,12 +990,14 @@ def protein_preparation(
         'cap_ter': cap_ter,
         'pH': pH,
         'his': his,
-        'output_format' : output_format 
+        'output_format' : output_format,
+        'restart': restart
     }
     configuration_path = create_config_file(output_path, **config_args)
 
     # Receiving the input configuration file (YAML)
-    conf = settings.ConfReader(configuration_path)
+    conf = settings.ConfReader(config=configuration_path)
+    conf.working_dir_path = output_path
 
     # Parsing the input configuration file (YAML);
     # Dividing it in global paths and global properties
@@ -1076,8 +1080,6 @@ def protein_preparation(
         # STEP 6: Model missing heavy atoms of backbone
         if fasta_available:
             global_log.info("step6_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
-            if modeller_key is not None:
-                global_prop["step6_fixbackbone"]["modeller_key"] = modeller_key
             fix_backbone(**global_paths["step6_fixbackbone"], properties=global_prop["step6_fixbackbone"])
             last_pdb_path = global_paths["step6_fixbackbone"]["output_pdb_path"]
         else:
@@ -1089,9 +1091,6 @@ def protein_preparation(
     if not skip_sc_fix:
         global_log.info("step7_fixsidechain: Modeling the missing heavy atoms in the structure side chains")
         global_paths['step7_fixsidechain']['input_pdb_path'] = last_pdb_path
-        if modeller_key is not None:
-            global_prop["step7_fixsidechain"]["modeller_key"] = modeller_key
-            global_prop["step7_fixsidechain"]["use_modeller"] = True
         fix_side_chain(**global_paths["step7_fixsidechain"], properties=global_prop["step7_fixsidechain"])
         last_pdb_path = global_paths["step7_fixsidechain"]["output_pdb_path"]
     else:
@@ -1107,8 +1106,6 @@ def protein_preparation(
     if not skip_amides_flip:
         global_log.info("step9_fixamides: fix clashing amides")
         global_paths['step9_fixamides']['input_pdb_path'] = last_pdb_path
-        if modeller_key is not None:
-            global_prop["step9_fixamides"]["modeller_key"] = modeller_key
         fix_amides(**global_paths["step9_fixamides"], properties=global_prop["step9_fixamides"])
         last_pdb_path = global_paths["step9_fixamides"]["output_pdb_path"]
     else:
@@ -1117,16 +1114,12 @@ def protein_preparation(
     # STEP 10: Fix chirality
     global_paths['step10_fixchirality']['input_pdb_path'] = last_pdb_path
     global_log.info("step10_fixchirality: fix chirality of residues")
-    if modeller_key is not None:
-        global_prop["step10_fixchirality"]["modeller_key"] = modeller_key
     fix_chirality(**global_paths["step10_fixchirality"], properties=global_prop["step10_fixchirality"])
     
     # STEP 11: model SS bonds (CYS -> CYX)
     if not skip_ss_bonds:
         global_log.info("step11_fixssbonds: Fix SS bonds")
         global_paths['step11_fixssbonds']['input_pdb_path'] = last_pdb_path
-        if modeller_key is not None:
-            global_prop["step11_fixssbonds"]["modeller_key"] = modeller_key
         fix_ssbonds(**global_paths["step11_fixssbonds"], properties=global_prop["step11_fixssbonds"])
         last_pdb_path = global_paths["step11_fixssbonds"]["output_pdb_path"]
     else:

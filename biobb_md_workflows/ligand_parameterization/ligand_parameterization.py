@@ -10,6 +10,8 @@ from typing import List, Union, Dict, Literal, Optional
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 
+from biobb_md_workflows.common import to_yaml
+
 from biobb_structure_utils.utils.extract_heteroatoms import extract_heteroatoms
 from biobb_amber.leap.leap_gen_top import leap_gen_top
 from biobb_chemistry.babelm.babel_minimize import babel_minimize
@@ -240,33 +242,34 @@ def copy_out_files(file_paths: List[str], ligand_name: str, output_folder: str):
 
 # YML construction
 def config_contents(
-    input_pdb: str,
-    forcefields: List[str]
+    input_pdb_path: str,
+    forcefields: List[str],
+    restart: bool = False
     ) -> str:
     """
     Returns the contents of the YAML configuration file as a string.
-    
-    The YAML file contains the configuration for the protein preparation workflow.
-    
+
+    The YAML file contains the configuration for the ligand parameterization workflow.
+
     Returns
     -------
     str
         The contents of the YAML configuration file.
     """
-    
-    return f""" 
+
+    return f"""
 # Global properties (common for all steps)
-global_properties:                                 # Wether to use GPU support or not
+global_properties:
   working_dir_path: output                         # Workflow default output directory
   can_write_console_log: False                     # Verbose writing of log information
-  restart: True                                    # Skip steps already performed
-  remove_tmp: True  
+  restart: {to_yaml(restart)}                      # Skip steps already performed
+  remove_tmp: True
 
 # Step 1: extract heteroatoms from input PDB file
 step1_ligand_extraction:
   tool: extract_heteroatoms
   paths:
-    input_structure_path: {input_pdb}
+    input_structure_path: {input_pdb_path}
     output_heteroatom_path: ligand.pdb
   properties:
     heteroatoms: null                                  # Will be set at run-time
@@ -364,19 +367,17 @@ def create_config_file(output_path: str,
     """
     
     config_path = os.path.join(output_path, 'config.yml')
-    
+
     # Write the contents to the file
     with open(config_path, 'w') as f:
         f.write(config_contents(**config_args))
-        
-    print(f"Configuration file created at {config_path}.")
 
     return config_path
 
 # Main workflow
 def ligand_parameterization(
-            input_pdb: str, 
-            forcefields: List[str] = ['protein.ff14SB', 'DNA.bsc1', 'gaff'], 
+            input_pdb_path: str,
+            forcefields: List[str] = ['protein.ff14SB', 'DNA.bsc1', 'gaff'],
             ligand_names: Union[List[str], None] = None, 
             charges: Union[List[str], None] = None, 
             chains: List[str] = ['A'], 
@@ -394,8 +395,8 @@ def ligand_parameterization(
 
     Inputs
     ------
-    
-        input_pdb: 
+
+        input_pdb_path:
             path to the input PDB file with the ligands to parameterize.
         forcefields: 
             list of paths or file names of force fields to use in the parameterization. 
@@ -444,13 +445,15 @@ def ligand_parameterization(
     
     # Create the configuration file
     config_args = {
-        'input_pdb': input_pdb,
-        'forcefields': forcefields
+        'input_pdb_path': input_pdb_path,
+        'forcefields': forcefields,
+        'restart': restart
     }
     configuration_path = create_config_file(output_path, **config_args)
-    
+
     # Receiving the input configuration file (YAML)
-    conf = settings.ConfReader(configuration_path)
+    conf = settings.ConfReader(config=configuration_path)
+    conf.working_dir_path = output_path
 
     # Parsing the input configuration file (YAML);
     # Dividing it in global paths and global properties
@@ -463,7 +466,7 @@ def ligand_parameterization(
     
     # Extract the ligands from the input PDB file
     global_log.info(f"Searching selected ligands in the input PDB file: {' '.join(ligand_names)}")
-    selected_ligands = get_selected_ligands(input_pdb, ligand_names, chains, model, global_log)
+    selected_ligands = get_selected_ligands(input_pdb_path, ligand_names, chains, model, global_log)
     global_log.info(f"Found {len(selected_ligands)} ligands in the input PDB file: {', '.join([ligand['name'] for ligand in selected_ligands])}")
     
     if len(selected_ligands) == 0:
@@ -501,7 +504,7 @@ def ligand_parameterization(
         ligand_paths = conf.get_paths_dic(prefix=ligand_name)
         
         # STEP 1: Extract ligand from the PDB file
-        ligand_paths["step1_ligand_extraction"]["input_structure_path"] = input_pdb
+        ligand_paths["step1_ligand_extraction"]["input_structure_path"] = input_pdb_path
         ligand_prop["step1_ligand_extraction"]["heteroatoms"] = [ligand_info]
         
         extract_heteroatoms(**ligand_paths["step1_ligand_extraction"], properties=ligand_prop["step1_ligand_extraction"])
@@ -614,8 +617,8 @@ def main():
     
     parser = argparse.ArgumentParser(description="Ligand parameterization with custom parameters or ambertools + GAFF")
 
-    parser.add_argument('--input_pdb', dest='input_pdb',
-                        help='Path to the input PDB file with the ligands to parameterize.', 
+    parser.add_argument('--input_pdb', dest='input_pdb_path',
+                        help='Path to the input PDB file with the ligands to parameterize.',
                         required=True)
     
     parser.add_argument('--forcefields', dest='forcefields', nargs='+',
@@ -668,8 +671,8 @@ def main():
     args = parser.parse_args()
     
     ligand_parameterization(
-        input_pdb = args.input_pdb, 
-        forcefields=args.forcefields, 
+        input_pdb_path = args.input_pdb_path,
+        forcefields=args.forcefields,
         ligand_names = args.ligand_names, 
         charges = args.charges,  
         chains = args.chains, 
