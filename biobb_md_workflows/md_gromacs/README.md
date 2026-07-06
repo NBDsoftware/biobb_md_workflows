@@ -48,12 +48,79 @@ Specially important are: the binary path of GROMACS and the MODELLER key. Make s
 
 The command line arguments can be used to provide some inputs and settings that will be prioritized over those in the YAML configuration file.
 
+
 ```bash
-python workflow.py --help
+conda activate biobb_md
+md_gromacs --help
 ```
 
 ```
+usage: MD Simulation with GROMACS [-h] [--input_pdb INPUT_PDB_PATH] [--ligands_folder LIGANDS_TOP_FOLDER] [--input_gro INPUT_GRO_PATH] [--input_top INPUT_TOP_PATH]
+                                  [--input_tpr INPUT_TPR_PATH] [--input_cpt INPUT_CPT_PATH] [--input_plumed_path INPUT_PLUMED_PATH] [--input_plumed_folder INPUT_PLUMED_FOLDER]
+                                  [--config CONFIG_PATH] [--gmx_bin GMX_BIN] [--mpi_bin MPI_BIN] [--mpi_np MPI_NP] [--num_threads_mpi NUM_THREADS_MPI] [--num_threads_omp NUM_THREADS_OMP]
+                                  [--use_gpu] [--restart] [--forcefield FORCEFIELD] [--ions_concentration IONS_CONCENTRATION] [--temp TEMPERATURE] [--seed RANDOM_SEED] [--setup_only]
+                                  [--skip_restraints] [--skip_solvation] [--dt DT] [--equil_time EQUIL_TIME] [--equil_frames EQUIL_FRAMES] [--equil_only] [--prod_time PROD_TIME]
+                                  [--prod_frames PROD_FRAMES] [--remove_raw_traj] [--keep_solvent] [--keep_residues RESIDUES_TO_KEEP [RESIDUES_TO_KEEP ...]] [--debug]
+                                  [--output OUTPUT_PATH]
 
+options:
+  -h, --help            show this help message and exit
+  --input_pdb INPUT_PDB_PATH
+                        Input PDB file. The workflow assumes the protonation state specified by the residue names is the correct one. Default: None
+  --ligands_folder LIGANDS_TOP_FOLDER
+                        Path to folder with .itp and .gro files for the ligands that should be included in the simulation. Compatible with '--input_pdb' and '--input_gro'/'--input_top'.
+                        Default: None
+  --input_gro INPUT_GRO_PATH
+                        Input structure file (.gro). Use together with '--input_top'. Restraints and ligands can be added; use '--skip_solvation' if the system is already solvated.
+                        Default: None
+  --input_top INPUT_TOP_PATH
+                        Input compressed topology file (.zip). Use together with '--input_gro'. Default: None
+  --input_tpr INPUT_TPR_PATH
+                        Input portable binary run input file (.tpr) to restart a simulation. Use together with '--input_cpt'. Default: None
+  --input_cpt INPUT_CPT_PATH
+                        Input checkpoint file (.cpt) to restart a simulation. Use together with '--input_tpr'. Default: None
+  --input_plumed_path INPUT_PLUMED_PATH
+                        Path to the main PLUMED input file (plumed.dat). If provided, PLUMED will be used during the production run. Default: None
+  --input_plumed_folder INPUT_PLUMED_FOLDER
+                        Path to the folder with all files needed by the main PLUMED input file, see input_plumed_path. Default: None
+  --config CONFIG_PATH  Configuration file (YAML)
+  --gmx_bin GMX_BIN     Path to GROMACS binary (gmx for single node and gmx_mpi for multi-node). Default: gmx
+  --mpi_bin MPI_BIN     Path to MPI binary. Default: null
+  --mpi_np MPI_NP       Number of MPI processes given to the mpi_bin. Default: None
+  --num_threads_mpi NUM_THREADS_MPI
+                        Number of MPI threads. Default: 0 (Let GROMACS guess)
+  --num_threads_omp NUM_THREADS_OMP
+                        Number of OpenMP threads. Default: 0 (Let GROMACS guess)
+  --use_gpu             Calculate non-bonding interactions and particle-mesh ewald in GPU by adding '-nb gpu -pme gpu' to mdrun call. If not used, gmx will still use a GPU for these
+                        calculations if available. Default: False
+  --restart             Restart the workflow from the last completed step. Default: False
+  --forcefield FORCEFIELD
+                        Forcefield to use. Default: amber99sb-ildn
+  --ions_concentration IONS_CONCENTRATION
+                        Concentration of ions in the system in mol/L (M). Default: 0.15 M
+  --temp TEMPERATURE    Temperature of the system in K. Default: 300
+  --seed RANDOM_SEED    Random seed for the simulations. If given, new velocities will be generated with this seed. Default: -1
+  --setup_only          Only setup the system. Default: False
+  --skip_restraints     Skip adding chain backbone position restraints to the topology. Only used for input_pdb and input_gro_top modes. Ligand restraints are always added if a ligands
+                        folder is provided. Default: False
+  --skip_solvation      Skip adding simulation box, solvent and ions (editconf, solvate, grompp, genion). Use when the input structure is already solvated. Only used for input_pdb and
+                        input_gro_top modes. Default: False
+  --dt DT               Time step in fs. Default: 2 fs
+  --equil_time EQUIL_TIME
+                        Time of each equilibration step in ns. Default: 1.0 ns
+  --equil_frames EQUIL_FRAMES
+                        Number of frames to save during the equilibration steps. Default: 500 frames
+  --equil_only          Only run the equilibration steps. Default: False
+  --prod_time PROD_TIME
+                        Total time of the production simulation in ns. Default: 100.0 ns
+  --prod_frames PROD_FRAMES
+                        Number of frames to save during the production steps. Default: 2000 frames
+  --remove_raw_traj     Delete the heavy, raw production trajectories after post-processing is complete to save disk space. Default: False
+  --keep_solvent        Keep solvent and ions in the final post-processed trajectory. Default: False
+  --keep_residues RESIDUES_TO_KEEP [RESIDUES_TO_KEEP ...]
+                        List of specific residue indices to keep in the final post-processed trajectory (e.g., --keep_residues 15 23 105). Default: None
+  --debug               Activate debug mode with more verbose logging. Default: False
+  --output OUTPUT_PATH  Output path. Default: 'output' in the current working directory
 ```
 
 ## Description
@@ -120,7 +187,7 @@ To make sure the system has been correctly prepared before minimizing or running
 
 7. **Post-processing**
 
-    Concatenate if the trajectories are parts. Image, dry and fitting.
+    Image, dry and fitting.
 
 Note that re-launching the workflow will skip the previously successful steps if restart is True and the output folder is the same. 
 
