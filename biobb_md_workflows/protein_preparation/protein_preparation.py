@@ -671,7 +671,16 @@ def biobb_titrate(input_structure_path: str, output_structure_path: str, propert
     return
            
 # YML construction
-def config_contents() -> str:
+def config_contents(
+    input_pdb_path : str,
+    pdb_chains: Optional[List],
+    mutation_list: Optional[List],
+    modeller_key: Optional[str],
+    cap_ter: bool = False,
+    pH: float = 7.0,
+    his: Optional[List] = None,
+    output_format: Literal['amber', 'gromacs'] = 'amber'
+    ) -> str:
     """
     Returns the contents of the YAML configuration file as a string.
     
@@ -682,7 +691,31 @@ def config_contents() -> str:
     str
         The contents of the YAML configuration file.
     """
-    
+
+    molecule_type = "all"
+    step1_chains_property = ""
+
+    # If chains are given as argument
+    if pdb_chains is not None:
+        molecule_type = "chains"
+        step1_chains_property = f"chains : {pdb_chains}"
+
+    step2_modkey_prop = ""
+    step3_properties = ""
+    step3_mutations_property = ""
+    step3_modkey_prop = ""
+    step3_modkey_prop = ""
+
+    if mutation_list is not None:
+        step3_properties = "properties:"
+        step3_mutations_property = f"mutation_list : {','.join(mutation_list)}"
+
+    if modeller_key is not None:
+        step2_modkey_prop = f"modeller_key : {modeller_key}"
+        step3_properties = "properties:"
+        step3_modkey_prop = f"modeller_key : {modeller_key}"
+        step3_usemod_prop = f"use_modeller : true" 
+        
     return f""" 
 # Global properties (common for all steps)
 global_properties:
@@ -695,10 +728,11 @@ global_properties:
 step1_extractAtoms:
   tool: extract_molecule
   paths:
-    input_structure_path: /path/to/input                            # Overwritten by command line
+    input_structure_path: {input_pdb_path}
     output_molecule_path: main_structure.pdb
   properties:
-    molecule_type: all                                             # type of molecule to extract. Options: all, protein, na, dna, rna, chains.
+    molecule_type: {molecule_type}
+    {step1_chains_property}
 
 # Step 2: fix alternative locations of residues if any with biobb_structure_checking and the Modeller suite (if key property is given)
 step2_fixaltlocs:                 
@@ -708,6 +742,7 @@ step2_fixaltlocs:
     output_pdb_path: fixaltlocs.pdb
   properties:
     altlocs: null                                                    # Format: ["Chain Residue_number:Altloc"], e.g. # ["A339:A", "A171:B", "A768:A"]                       # MODELLER license key
+    {step2_modkey_prop}
 
 # Step 3: Mutate residues in the structure if needed
 step3_mutations:
@@ -715,6 +750,10 @@ step3_mutations:
   paths:
     input_pdb_path: dependency/step2_fixaltlocs/output_pdb_path
     output_pdb_path: mutated.pdb
+  {step3_properties}
+    {step3_mutations_property}
+    {step3_modkey_prop}
+    {step3_usemod_prop}
 
 # Step 4: Download a FASTA file with the canonical sequence of the protein
 # It requires internet connection and a PDB code
@@ -743,7 +782,7 @@ step6_fixbackbone:
     input_fasta_canonical_sequence_path: dependency/step4_canonical_fasta/output_fasta_path
     output_pdb_path: fixbackbone.pdb
   properties:
-    add_caps: False
+    add_caps: {cap_ter}
 
 # Step 2 E: Model missing side chain atoms with biobb_structure_checking and the Modeller suite (if key property is given)
 step7_fixsidechain:
@@ -813,7 +852,9 @@ step15_titrate:
     input_structure_path: dependency/step12_remove_hs/output_path
     output_structure_path: titrate.pdb
   properties:
-    pH: 7.0
+    pH: {pH}
+    his: {his}
+    pdb_format: {output_format}
 
 # Put back hydrogens
 step16_pdb4amber:
@@ -825,46 +866,54 @@ step16_pdb4amber:
     reduce: True
 """
 
-def create_config_file(config_path: str) -> None:
+def create_config_file(output_path: str,
+                       **config_args) -> str:
     """
-    Create a YAML configuration file for the workflow if needed.
+    Create a YAML configuration file for the workflow in the output path.
+    Return the path to the configuration file.
     
     Parameters
     ----------
-    config_path : str
-        Path to the configuration file to be created.
+    output_path : str
+        Path to the output folder
+    config_args : dict
+        Arguments to be used in the configuration file.
     
     Returns
     -------
-    None
+    
+    str
+        Path to configuration file
     """
     
-    # Check if the file already exists
-    if os.path.exists(config_path):
-        print(f"Configuration file already exists at {config_path}.")
-        return
+    config_path = os.path.join(output_path, 'config.yml')
     
     # Write the contents to the file
     with open(config_path, 'w') as f:
-        f.write(config_contents())
+        f.write(config_contents(**config_args))
+        
+    print(f"Configuration file created at {config_path}.")
+
+    return config_path
     
 # Main workflow
-def protein_preparation(input_pdb_path: str,
-            configuration_path: Optional[str] = None,  
-            pdb_code: Optional[str] = None, 
-            pdb_chains: Optional[List] = None, 
-            mutation_list: Optional[List] = None, 
-            skip_bc_fix: bool = False, 
-            modeller_key: Optional[str] = None,
-            cap_ter: bool = False,
-            skip_sc_fix: bool = False, 
-            skip_ss_bonds: bool = False, 
-            skip_amides_flip: bool = False, 
-            pH: float = 7.0,
-            his: Optional[List] = None, 
-            keep_hs: bool = False, 
-            output_format: Literal['amber', 'gromacs'] = 'amber',
-            output_path: Optional[str] = None
+def protein_preparation(
+    input_pdb_path: str,
+    pdb_code: Optional[str] = None, 
+    pdb_chains: Optional[List] = None, 
+    mutation_list: Optional[List] = None, 
+    skip_bc_fix: bool = False, 
+    modeller_key: Optional[str] = None,
+    cap_ter: bool = False,
+    skip_sc_fix: bool = False, 
+    skip_ss_bonds: bool = False, 
+    skip_amides_flip: bool = False, 
+    pH: float = 7.0,
+    his: Optional[List] = None, 
+    keep_hs: bool = False, 
+    output_format: Literal['amber', 'gromacs'] = 'amber',
+    restart: bool = False,
+    output_path: Optional[str] = None
     ):
     '''
     Protein preparation workflow. Can be used to fix some PDB defects of the structure, add specific mutations 
@@ -873,8 +922,6 @@ def protein_preparation(input_pdb_path: str,
     Inputs
     ------
 
-        configuration_path: 
-            path to YAML configuration file
         input_pdb_path: 
             path to input PDB file
         pdb_code: 
@@ -926,40 +973,33 @@ def protein_preparation(input_pdb_path: str,
     
     start_time = time.time()
     
-    # Default configuration file
-    default_config = False
-    if configuration_path is None:
-        default_config = True
-        configuration_path = "config.yml"
-        create_config_file(configuration_path)
+    # Determine final output path
+    output_path = fu.get_working_dir_path(output_path, restart=restart)
+    
+    # Initialize a global log file
+    global_log, _ = fu.get_logs(path=output_path, light_format=True)
+    
+    # Create the configuration file
+    config_args = {
+        'input_pdb_path' : input_pdb_path,
+        'pdb_chains' : pdb_chains,
+        'mutation_list' : mutation_list,
+        'modeller_key' : modeller_key,
+        'cap_ter': cap_ter,
+        'pH': pH,
+        'his': his,
+        'output_format' : output_format 
+    }
+    configuration_path = create_config_file(output_path, **config_args)
 
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
-
-    # Enforce output_path if provided
-    if output_path is not None:
-        output_path = fu.get_working_dir_path(output_path, restart = conf.properties.get('restart', 'False'))
-        conf.working_dir_path = output_path
-    else:
-        output_path = conf.get_working_dir_path()
-
-    # Initializing a global log file
-    global_log, _ = fu.get_logs(path=output_path, light_format=True)
 
     # Parsing the input configuration file (YAML);
     # Dividing it in global paths and global properties
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
 
-    # Set input PDB
-    pdb_file_name = Path(input_pdb_path).stem
-    global_paths["step1_extractAtoms"]["input_structure_path"] = input_pdb_path
-
-    # If chains are given as argument
-    if pdb_chains is not None:
-        global_prop["step1_extractAtoms"]["molecule_type"] = "chains"
-        global_prop["step1_extractAtoms"]["chains"] = pdb_chains
-    
     # STEP 1: extract main structure of interest while removing water and ligands (heteroatoms)
     global_log.info("step1_extractAtoms: extract chain of interest")
     extract_molecule(**global_paths["step1_extractAtoms"], properties=global_prop["step1_extractAtoms"])
@@ -967,8 +1007,6 @@ def protein_preparation(input_pdb_path: str,
     # STEP 2: Fix alternative locations
     global_log.info("step2_fixaltlocs: Fix alternative locations")
     global_prop["step2_fixaltlocs"]["altlocs"] = highest_occupancy_altlocs(global_paths["step1_extractAtoms"]["input_structure_path"], global_log)
-    if modeller_key is not None:
-        global_prop["step2_fixaltlocs"]["modeller_key"] = modeller_key
     fix_altlocs(**global_paths["step2_fixaltlocs"], properties=global_prop["step2_fixaltlocs"])
 
     # Standardize some residue names - NOTE: to be improved
@@ -976,14 +1014,6 @@ def protein_preparation(input_pdb_path: str,
     last_pdb_path = rename_ss_bonds(last_pdb_path, 'standard')
     
     # STEP 3: Add mutations if requested
-    if mutation_list is not None:
-        global_prop["step3_mutations"]["mutation_list"] = ",".join(mutation_list)
-        global_log.info("step3_mutations: Adding mutations")
-    else:
-        global_log.info("step3_mutations: No mutations to be added")
-    if modeller_key is not None:
-        global_prop["step3_mutations"]["modeller_key"] = modeller_key
-        global_prop["step3_mutations"]["use_modeller"] = True
     global_paths["step3_mutations"]["input_pdb_path"] = last_pdb_path
     mutate(**global_paths["step3_mutations"], properties=global_prop["step3_mutations"])
     last_pdb_path = global_paths["step3_mutations"]["output_pdb_path"]
@@ -1046,7 +1076,6 @@ def protein_preparation(input_pdb_path: str,
         # STEP 6: Model missing heavy atoms of backbone
         if fasta_available:
             global_log.info("step6_fixbackbone: Modeling the missing heavy atoms in the structure side chains")
-            global_prop["step6_fixbackbone"]["add_caps"] = cap_ter
             if modeller_key is not None:
                 global_prop["step6_fixbackbone"]["modeller_key"] = modeller_key
             fix_backbone(**global_paths["step6_fixbackbone"], properties=global_prop["step6_fixbackbone"])
@@ -1133,9 +1162,6 @@ def protein_preparation(input_pdb_path: str,
     # STEP 15: Choose protonation states for titratable residues
     global_log.info("step15_titrate: Choose protonation states for titratable residues") 
     global_paths["step15_titrate"]["input_structure_path"] = last_pdb_path
-    global_prop["step15_titrate"]["pH"] = pH
-    global_prop["step15_titrate"]["his"] = his
-    global_prop["step15_titrate"]["pdb_format"] = output_format
     global_prop["step15_titrate"]["pKa_results"] = pKa_results
     biobb_titrate(**global_paths["step15_titrate"], properties=global_prop["step15_titrate"], global_log=global_log)
     last_pdb_path = global_paths["step15_titrate"]["output_structure_path"]
@@ -1155,13 +1181,8 @@ def protein_preparation(input_pdb_path: str,
     # NOTE: We should make sure that PDB complies with the PDB format (while considering 4 letter resnames)
     
     # Copy the final PDB file to the output path
-    final_pdb_path = os.path.join(output_path, f"{pdb_file_name}.pdb")
+    final_pdb_path = os.path.join(output_path, f"{Path(input_pdb_path).stem}.pdb")
     shutil.copy(last_pdb_path, final_pdb_path)
-    
-    if default_config:
-        # Move the default configuration file to the output path
-        shutil.move(configuration_path, os.path.join(output_path, 'config.yml'))
-        configuration_path = os.path.join(output_path, 'config.yml')
     
     # Print timing information to log file
     elapsed_time = time.time() - start_time
@@ -1184,10 +1205,6 @@ def main():
     parser.add_argument('--input_pdb', dest='input_pdb_path', type=str,
                         help="Input PDB file.",
                         required=True)
-    
-    parser.add_argument('--config', dest='config_path', type=str,
-                        help="Configuration file (YAML)",
-                        required=False)
 
     parser.add_argument('--pdb_code', dest='pdb_code', type=str,
                         help="""PDB code to get the canonical FASTA sequence of the input PDB file. 
@@ -1256,6 +1273,10 @@ def main():
     parser.add_argument('--output_format', dest='output_format', type=str,
                         help="""PDB format to be used. Options: amber, gromacs. Default: 'amber'""",
                         required=False, default='amber')
+
+    parser.add_argument('--restart', action='store_true',
+                        help="Restart the workflow from the last completed step. Default: False",
+                        required=False, default=False)
     
     parser.add_argument('--output', dest='output_path', type=str,
                         help="Output path. Default: 'output' in the current working directory",
@@ -1263,22 +1284,23 @@ def main():
 
     args = parser.parse_args()
     
-    protein_preparation(input_pdb_path=args.input_pdb_path, 
-            configuration_path=args.config_path, 
-            pdb_code=args.pdb_code, 
-            pdb_chains=args.pdb_chains, 
-            mutation_list=args.mutation_list, 
-            skip_bc_fix=args.skip_bc_fix, 
-            modeller_key=args.modeller_key,
-            cap_ter=args.cap_ter,
-            skip_sc_fix=args.skip_sc_fix, 
-            skip_ss_bonds=args.skip_ss_bonds, 
-            skip_amides_flip=args.skip_amides_flip, 
-            pH=args.ph,
-            his=args.his,
-            keep_hs=args.keep_hs, 
-            output_format=args.output_format,
-            output_path=args.output_path)
+    protein_preparation(
+        input_pdb_path=args.input_pdb_path, 
+        pdb_code=args.pdb_code, 
+        pdb_chains=args.pdb_chains, 
+        mutation_list=args.mutation_list, 
+        skip_bc_fix=args.skip_bc_fix, 
+        modeller_key=args.modeller_key,
+        cap_ter=args.cap_ter,
+        skip_sc_fix=args.skip_sc_fix, 
+        skip_ss_bonds=args.skip_ss_bonds, 
+        skip_amides_flip=args.skip_amides_flip, 
+        pH=args.ph,
+        his=args.his,
+        keep_hs=args.keep_hs, 
+        output_format=args.output_format,
+        restart=args.restart,
+        output_path=args.output_path)
 
 
 if __name__ == '__main__':

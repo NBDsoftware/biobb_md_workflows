@@ -5,7 +5,7 @@ import shutil
 import argparse
 from pathlib import Path
 from Bio.PDB import PDBParser
-from typing import List, Union, Dict, Literal
+from typing import List, Union, Dict, Literal, Optional
 
 from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
@@ -239,7 +239,10 @@ def copy_out_files(file_paths: List[str], ligand_name: str, output_folder: str):
             shutil.copyfile(path, new_file_path)
 
 # YML construction
-def config_contents() -> str:
+def config_contents(
+    input_pdb: str,
+    forcefields: List[str]
+    ) -> str:
     """
     Returns the contents of the YAML configuration file as a string.
     
@@ -253,20 +256,20 @@ def config_contents() -> str:
     
     return f""" 
 # Global properties (common for all steps)
-global_properties:                                                                               # Wether to use GPU support or not
-  working_dir_path: output                                                                          # Workflow default output directory
-  can_write_console_log: False                                                                      # Verbose writing of log information
-  restart: True                                                                                     # Skip steps already performed
+global_properties:                                 # Wether to use GPU support or not
+  working_dir_path: output                         # Workflow default output directory
+  can_write_console_log: False                     # Verbose writing of log information
+  restart: True                                    # Skip steps already performed
   remove_tmp: True  
 
 # Step 1: extract heteroatoms from input PDB file
 step1_ligand_extraction:
   tool: extract_heteroatoms
   paths:
-    input_structure_path: /path/to/input              # Will be set by the workflow
+    input_structure_path: {input_pdb}
     output_heteroatom_path: ligand.pdb
   properties:
-    heteroatoms: null                                  # Will be set by the workflow
+    heteroatoms: null                                  # Will be set at run-time
 
 step2A_leap_gen_top:
   tool: leap_gen_top
@@ -278,7 +281,7 @@ step2A_leap_gen_top:
     output_top_path: cofactors.prmtop
     output_crd_path: cofactors.inpcrd
   properties:
-    forcefield: ["protein.ff14SB"]                    # Will be set by the workflow
+    forcefield: {forcefields}                    # Will be set by the workflow
 
 step3A_amber_to_gmx:
   tool: acpype_convert_amber_to_gmx
@@ -340,31 +343,38 @@ step4B_acpype_params_ac:
     basename: biobb_AC_LP
 """
 
-def create_config_file(config_path: str) -> None:
+def create_config_file(output_path: str,
+                       **config_args) -> str:
     """
-    Create a YAML configuration file for the workflow if needed.
+    Create a YAML configuration file for the workflow in the output path.
+    Return the path to the configuration file.
     
     Parameters
     ----------
-    config_path : str
-        Path to the configuration file to be created.
+    output_path : str
+        Path to the output folder
+    config_args : dict
+        Arguments to be used in the configuration file.
     
     Returns
     -------
-    None
+    
+    str
+        Path to configuration file
     """
     
-    # Check if the file already exists
-    if os.path.exists(config_path):
-        print(f"Configuration file already exists at {config_path}.")
-        return
+    config_path = os.path.join(output_path, 'config.yml')
     
     # Write the contents to the file
     with open(config_path, 'w') as f:
-        f.write(config_contents())
+        f.write(config_contents(**config_args))
+        
+    print(f"Configuration file created at {config_path}.")
+
+    return config_path
 
 # Main workflow
-def ligand_parameterization(configuration_path: str, 
+def ligand_parameterization(
             input_pdb: str, 
             forcefields: List[str] = ['protein.ff14SB', 'DNA.bsc1', 'gaff'], 
             ligand_names: Union[List[str], None] = None, 
@@ -375,6 +385,7 @@ def ligand_parameterization(configuration_path: str,
             custom_parameters: Union[str, None] = None,
             protonation_tool: Literal['ambertools', 'obabel', 'none'] = 'ambertools', 
             skip_min: bool = False, 
+            restart: bool = False,
             output_top_path: Union[str, None] = None, 
             output_path: Union[str, None] = None
     ):
@@ -384,8 +395,6 @@ def ligand_parameterization(configuration_path: str,
     Inputs
     ------
     
-        configuration_path: 
-            path to YAML configuration file
         input_pdb: 
             path to the input PDB file with the ligands to parameterize.
         forcefields: 
@@ -427,34 +436,30 @@ def ligand_parameterization(configuration_path: str,
     
     start_time = time.time()
     
-    # Default configuration file
-    default_config = False
-    if configuration_path is None:
-        default_config = True
-        configuration_path = "config.yml"
-        create_config_file(configuration_path)
+    # Determine final output path
+    output_path = fu.get_working_dir_path(output_path, restart=restart)
+    
+    # Initialize a global log file
+    global_log, _ = fu.get_logs(path=output_path, light_format=True)
+    
+    # Create the configuration file
+    config_args = {
+        'input_pdb': input_pdb,
+        'forcefields': forcefields
+    }
+    configuration_path = create_config_file(output_path, **config_args)
     
     # Receiving the input configuration file (YAML)
     conf = settings.ConfReader(configuration_path)
-    
-    # Enforce output_path if provided
-    if output_path is not None:
-        output_path = fu.get_working_dir_path(output_path, restart = conf.properties.get('restart', 'False'))
-        conf.working_dir_path = output_path
-    else:
-        output_path = conf.get_working_dir_path()
-        
-    if output_top_path is None:
-        output_top_path = os.path.join(output_path, 'topologies')
-    os.makedirs(output_top_path, exist_ok=True)
-        
-    # Initializing a global log file
-    global_log, _ = fu.get_logs(path=output_path, light_format=True)
 
     # Parsing the input configuration file (YAML);
     # Dividing it in global paths and global properties
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
+
+    if output_top_path is None:
+        output_top_path = os.path.join(output_path, 'topologies')
+    os.makedirs(output_top_path, exist_ok=True)
     
     # Extract the ligands from the input PDB file
     global_log.info(f"Searching selected ligands in the input PDB file: {' '.join(ligand_names)}")
@@ -499,12 +504,9 @@ def ligand_parameterization(configuration_path: str,
         ligand_paths["step1_ligand_extraction"]["input_structure_path"] = input_pdb
         ligand_prop["step1_ligand_extraction"]["heteroatoms"] = [ligand_info]
         
-        print(ligand_prop["step1_ligand_extraction"]["heteroatoms"])
         extract_heteroatoms(**ligand_paths["step1_ligand_extraction"], properties=ligand_prop["step1_ligand_extraction"])
         
-        # Distinguish between ligands with available parameter set (path A) or new ligand (path B)
-        
-        # Parameter set available 
+        # For ligands with parameter set available 
         if ligand_name in parameter_sets:
             
             if format == 'gromacs':
@@ -515,7 +517,6 @@ def ligand_parameterization(configuration_path: str,
                 # STEP 2A: Use leap to generate the topology from the custom parameter set
                 ligand_paths["step2A_leap_gen_top"]["input_frcmod_path"] = parameter_sets[ligand_name]['frcmod']
                 ligand_paths["step2A_leap_gen_top"]["input_prep_path"] = parameter_sets[ligand_name]['prep']
-                ligand_paths["step2A_leap_gen_top"]["forcefield"] = forcefields
                 global_log.info("step2A_leap_gen_top: Generate topology with custom parameter set")
                 leap_gen_top(**ligand_paths["step2A_leap_gen_top"], properties=ligand_prop["step2A_leap_gen_top"])
                             
@@ -596,11 +597,6 @@ def ligand_parameterization(configuration_path: str,
         # Copy the topology of this ligand to the final output folder
         copy_out_files(out_files, ligand_name, output_top_path)
         
-    if default_config:
-        # Move the default configuration file to the output path
-        shutil.move(configuration_path, os.path.join(output_path, 'config.yml'))
-        configuration_path = os.path.join(output_path, 'config.yml')
-        
     # Print timing information to log file
     elapsed_time = time.time() - start_time
     global_log.info('')
@@ -617,10 +613,6 @@ def ligand_parameterization(configuration_path: str,
 def main():
     
     parser = argparse.ArgumentParser(description="Ligand parameterization for AMBER or GROMACS")
-    
-    parser.add_argument('--config', dest='config_path', 
-                        help='Configuration file (YAML)', 
-                        required=False)
 
     parser.add_argument('--input_pdb', dest='input_pdb',
                         help='Path to the input PDB file with the ligands to parameterize.', 
@@ -661,6 +653,10 @@ def main():
                         help='Skip the minimization step.',
                         required=False, default=False)
     
+    parser.add_argument('--restart', action='store_true',
+                        help="Restart the workflow from the last completed step. Default: False",
+                        required=False, default=False)
+    
     parser.add_argument('--output_top_path', dest='output_top_path',
                         help='Output path for the folder with ligand topologies (Amber: .frcmod and .prep/.lib files, Gromacs: .gro and .itp files).',
                         required=False, default=None)
@@ -672,7 +668,6 @@ def main():
     args = parser.parse_args()
     
     ligand_parameterization(
-        configuration_path = args.config_path, 
         input_pdb = args.input_pdb, 
         forcefields=args.forcefields, 
         ligand_names = args.ligand_names, 
@@ -681,8 +676,9 @@ def main():
         model = args.model, 
         format = args.format, 
         custom_parameters = args.custom_parameters, 
-        protonation_tool = args.protonation_tool, 
+        protonation_tool = args.protonation_tool,
         skip_min = args.skip_min, 
+        restart = args.restart, 
         output_top_path = args.output_top_path, 
         output_path=args.output_path
     )
