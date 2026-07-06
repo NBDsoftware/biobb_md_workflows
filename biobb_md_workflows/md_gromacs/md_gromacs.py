@@ -1472,39 +1472,40 @@ def create_config_file(output_path: str,
     
   
 # Main workflow
-def md_gromacs(input_pdb_path: Optional[str] = None, 
-            ligands_top_folder: Optional[str] = None, 
-            input_gro_path: Optional[str] = None, 
-            input_top_path: Optional[str] = None, 
-            input_tpr_path: Optional[str] = None, 
-            input_cpt_path: Optional[str] = None,
-            input_plumed_path: Optional[str] = None,
-            input_plumed_folder: Optional[str] = None, 
-            gmx_bin: Optional[str] = 'gmx',
-            mpi_bin: Optional[str] = None,
-            mpi_np: Optional[int] = None,
-            num_threads_mpi: Optional[int] = 0,
-            num_threads_omp: Optional[int] = 0,
-            use_gpu: Optional[bool] = False,
-            restart: Optional[bool] = False,
-            forcefield: Optional[str] = 'amber99sb-ildn', 
-            ions_concentration:  Optional[float] = 0.15,
-            temperature:  Optional[float] = 300.0,
-            random_seed: Optional[int] = None,
-            setup_only: Optional[bool] = False,
-            skip_restraints: Optional[bool] = False,
-            skip_solvation: Optional[bool] = False,
-            dt: Optional[float] = 2.0,
-            equil_time: Optional[float] = 1,
-            equil_frames: Optional[int] = 500,
-            equil_only: Optional[bool] = False, 
-            prod_time: Optional[float] = 100,
-            prod_frames: Optional[int] = 2000,
-            remove_raw_traj: Optional[bool] = False,
-            keep_solvent: Optional[bool] = False,
-            residues_to_keep: Optional[List[int]] = None,
-            debug: Optional[bool] = False,
-            output_path: Optional[str] = 'output'
+def md_gromacs(
+    input_pdb_path: Optional[str] = None, 
+    ligands_top_folder: Optional[str] = None, 
+    input_gro_path: Optional[str] = None, 
+    input_top_path: Optional[str] = None, 
+    input_tpr_path: Optional[str] = None, 
+    input_cpt_path: Optional[str] = None,
+    input_plumed_path: Optional[str] = None,
+    input_plumed_folder: Optional[str] = None, 
+    gmx_bin: Optional[str] = 'gmx',
+    mpi_bin: Optional[str] = None,
+    mpi_np: Optional[int] = None,
+    num_threads_mpi: Optional[int] = 0,
+    num_threads_omp: Optional[int] = 0,
+    use_gpu: Optional[bool] = False,
+    restart: bool = False,
+    forcefield: Optional[str] = 'amber99sb-ildn', 
+    ions_concentration:  Optional[float] = 0.15,
+    temperature:  Optional[float] = 300.0,
+    random_seed: Optional[int] = None,
+    setup_only: Optional[bool] = False,
+    skip_restraints: Optional[bool] = False,
+    skip_solvation: Optional[bool] = False,
+    dt: Optional[float] = 2.0,
+    equil_time: Optional[float] = 1,
+    equil_frames: Optional[int] = 500,
+    equil_only: Optional[bool] = False, 
+    prod_time: Optional[float] = 100,
+    prod_frames: Optional[int] = 2000,
+    remove_raw_traj: Optional[bool] = False,
+    keep_solvent: Optional[bool] = False,
+    residues_to_keep: Optional[List[int]] = None,
+    debug: Optional[bool] = False,
+    output_path: Optional[str] = 'output'
     ) -> Tuple[str, Dict[str, Any]]:
     '''
     Main MD setup and run workflow with GROMACS. Can be used to prepare and launch an MD simulation.
@@ -1512,6 +1513,8 @@ def md_gromacs(input_pdb_path: Optional[str] = None,
     Inputs
     ------
 
+        configuration_path:
+            path to input configuration path
         input_pdb_path: 
             path to input PDB file
         ligands_top_folder:
@@ -1634,7 +1637,7 @@ def md_gromacs(input_pdb_path: Optional[str] = None,
     if residues_to_keep:
         check_residues_exist(input_pdb_path, residues_to_keep, global_log)
     
-    # Create and load the configuration
+    # Create the configuration file
     config_args = {
         'gmx_bin': gmx_bin,
         'mpi_bin': mpi_bin,
@@ -1756,10 +1759,6 @@ def md_gromacs(input_pdb_path: Optional[str] = None,
 
             # POSRES names for each chain
             posres_names = " ".join([chains_dict[chain]["posres_name"] for chain in chains_dict])
-            
-            print(f"posres_names: {posres_names}")
-            print(f"ref_rest_mol_triplet_list: {ref_rest_mol_triplet_list}")
-            print(f"master_index_file: {master_index_file}")
 
             # STEP 4: Append position restraints to the topology file
             global_log.info(f"step4_append_posres: Append restraints to the topology")
@@ -2223,11 +2222,6 @@ def main():
     # Configuration options #
     #########################
 
-    # General configuration file
-    parser.add_argument('--config', dest='config_path', type=str,
-                        help="Configuration file (YAML)",
-                        required=False)
-
     parser.add_argument('--gmx_bin', type=str,
                         help="Path to GROMACS binary (gmx for single node and gmx_mpi for multi-node). Default: gmx",
                         required=False, default='gmx')
@@ -2352,39 +2346,40 @@ def main():
         args.random_seed = int(args.random_seed)
         
     # Run the main workflow
-    md_gromacs(input_pdb_path=args.input_pdb_path, 
-            ligands_top_folder=args.ligands_top_folder, 
-            input_gro_path=args.input_gro_path, 
-            input_top_path=args.input_top_path,
-            input_tpr_path=args.input_tpr_path,
-            input_cpt_path=args.input_cpt_path,
-            input_plumed_path=args.input_plumed_path,
-            input_plumed_folder=args.input_plumed_folder, 
-            gmx_bin=args.gmx_bin,
-            mpi_bin=args.mpi_bin,
-            mpi_np=args.mpi_np,
-            num_threads_mpi=args.num_threads_mpi,
-            num_threads_omp=args.num_threads_omp,
-            use_gpu=args.use_gpu,
-            restart=args.restart,
-            forcefield=args.forcefield, 
-            ions_concentration=args.ions_concentration,
-            temperature=args.temperature,
-            random_seed=args.random_seed,
-            setup_only=args.setup_only,
-            skip_restraints=args.skip_restraints,
-            skip_solvation=args.skip_solvation,
-            dt=args.dt, 
-            equil_time=args.equil_time,
-            equil_frames=args.equil_frames,
-            equil_only=args.equil_only, 
-            prod_time=args.prod_time, 
-            prod_frames=args.prod_frames,
-            remove_raw_traj=args.remove_raw_traj,
-            keep_solvent=args.keep_solvent,
-            residues_to_keep=args.residues_to_keep,
-            debug=args.debug,
-            output_path=args.output_path)
+    md_gromacs(
+        input_pdb_path=args.input_pdb_path, 
+        ligands_top_folder=args.ligands_top_folder, 
+        input_gro_path=args.input_gro_path, 
+        input_top_path=args.input_top_path,
+        input_tpr_path=args.input_tpr_path,
+        input_cpt_path=args.input_cpt_path,
+        input_plumed_path=args.input_plumed_path,
+        input_plumed_folder=args.input_plumed_folder, 
+        gmx_bin=args.gmx_bin,
+        mpi_bin=args.mpi_bin,
+        mpi_np=args.mpi_np,
+        num_threads_mpi=args.num_threads_mpi,
+        num_threads_omp=args.num_threads_omp,
+        use_gpu=args.use_gpu,
+        restart=args.restart,
+        forcefield=args.forcefield, 
+        ions_concentration=args.ions_concentration,
+        temperature=args.temperature,
+        random_seed=args.random_seed,
+        setup_only=args.setup_only,
+        skip_restraints=args.skip_restraints,
+        skip_solvation=args.skip_solvation,
+        dt=args.dt, 
+        equil_time=args.equil_time,
+        equil_frames=args.equil_frames,
+        equil_only=args.equil_only, 
+        prod_time=args.prod_time, 
+        prod_frames=args.prod_frames,
+        remove_raw_traj=args.remove_raw_traj,
+        keep_solvent=args.keep_solvent,
+        residues_to_keep=args.residues_to_keep,
+        debug=args.debug,
+        output_path=args.output_path)
 
 
 if __name__ == '__main__':
