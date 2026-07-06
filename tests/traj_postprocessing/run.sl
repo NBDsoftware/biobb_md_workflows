@@ -5,11 +5,8 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --time=00:30:00
 #SBATCH --mem-per-cpu=500
-#SBATCH --partition=short
-#SBATCH --qos=short
 #SBATCH --output=report_%j.out
 #SBATCH --error=report_%j.err
-#SBATCH --exclude=node[005-007]
 
 # Purge loaded modules
 module purge 
@@ -20,16 +17,17 @@ GMX_BIN=$(which gmx)
 
 # Activate conda environment
 module load Miniconda3
-source activate /shared/work/BiobbWorkflows/envs/biobb_md
+source activate /path/to/env/biobb_md # e.g. /shared/work/BiobbWorkflows/envs/biobb_md
 
+# Unset PYTHONPATH to avoid conflicts with GROMACS module
 unset PYTHONPATH
 
 # Input files
 # WARNING: This test requires an external raw trajectory not contained in the repository
-INPUT_FOLDER=/shared/work/projects/MDDB/ModTox/trajectories/CYPs/output_1eqg/
+INPUT_FOLDER=/path/to/MD/simulation/
 INPUT_TPR=$INPUT_FOLDER/topology.tpr
 INPUT_XTC=$INPUT_FOLDER/raw_md_1_part0.xtc
-INPUT_STR=/shared/work/projects/MDDB/ModTox/biobb_workflow_outputs/CYPs/output_1eqg_rep2/step3N_gro2pdb/topology.pdb
+INPUT_STR=/path/to/topology/topology.pdb
 
 OUTPUT_PATH=output
 OUTPUT_TRAJ=trajectory.xtc

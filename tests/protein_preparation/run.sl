@@ -4,8 +4,6 @@
 #SBATCH --ntasks=1
 #SBATCH --time=00:30:00
 #SBATCH --mem-per-cpu=1000
-#SBATCH --partition=short
-#SBATCH --qos=short
 #SBATCH --output=report_%j.out
 #SBATCH --error=report_%j.err
 
@@ -14,7 +12,7 @@ module purge
 
 # Activate conda environment
 module load Miniconda3
-source activate /shared/work/BiobbWorkflows/envs/biobb_md
+source activate /path/to/env/biobb_md # e.g. /shared/work/BiobbWorkflows/envs/biobb_md
 
 # Input files
 DATA_FOLDER=../../data
@@ -28,7 +26,7 @@ protein_preparation --config input.yml \
                     --ph 7 \
                     --cap_ter \
                     --output_format gromacs \
-                    --modeller_key MODELIRANJE
+                    --modeller_key <MODELLER-KEY>
 
 # Remove report files
 rm report_*

@@ -10,11 +10,9 @@
 # Purge loaded modules
 module purge 
 
-# Load conda / miniconda module
+# Activate conda environment, see environment.yml
 module load Miniconda3
-
-# Activate previously created conda environment from environment.yml
-source activate /shared/work/BiobbWorkflows/envs/biobb_md
+source activate /path/to/env/biobb_md  # e.g. /shared/work/BiobbWorkflows/envs/biobb_md
 
 # Input files
 DATA_FOLDER=../../data
