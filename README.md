@@ -21,6 +21,7 @@ Requirements: `git`, `conda`
 ```bash
 git clone https://github.com/NBDsoftware/biobb_md_workflows.git
 cd biobb_md_workflows
+export KEY_MODELLER="HERE YOUR MODELLER KEY" # Only for academic use
 conda env create -f environment.yml
 conda activate biobb_md
 ```
