@@ -681,6 +681,7 @@ def config_contents(
     cap_ter: bool = False,
     pH: float = 7.0,
     his: Optional[List] = None,
+    keep_hs: bool = False,
     output_format: Literal['amber', 'gromacs'] = 'amber',
     restart: bool = False
     ) -> str:
@@ -870,7 +871,7 @@ step16_pdb4amber:
     input_pdb_path: dependency/step15_titrate/output_structure_path
     output_pdb_path: pdb4amber.pdb
   properties:
-    reduce: true
+    reduce: {to_yaml(not keep_hs)}
 """
 
 def create_config_file(output_path: str,
@@ -993,6 +994,7 @@ def protein_preparation(
         'cap_ter': cap_ter,
         'pH': pH,
         'his': his,
+        'keep_hs': keep_hs,
         'output_format' : output_format,
         'restart': restart
     }
@@ -1137,37 +1139,43 @@ def protein_preparation(
     else:
         global_log.info("step12_remove_hs: Skipping removal of hydrogens")
         
-    # STEP 13: Estimate pKa of titratable residues with propka
-    # NOTE: do we need no hydrogens? -> check
-    # NOTE: we need standardized residue names for propka! Otherwise it will skip them
-    global_log.info("step13_propka: Estimate protonation state of titratable residues from empirical pKa calculation with propka")
-    global_paths["step13_propka"]["input_structure_path"] = last_pdb_path
-    biobb_propka(**global_paths["step13_propka"], properties=global_prop["step13_propka"], global_log=global_log)
-    pKa_results = propka_summary(global_paths["step13_propka"]["output_summary_path"])
-    
     # Rename atoms from terminal residues (ACE/NME) to amber format
     last_pdb_path = rename_ter(last_pdb_path, format='amber')
-    
-    # STEP 14: Run reduce from Amber Tools to estimate optimal proton placement in histidines
-    # NOTE: Should we remove hydrogens in a separate step before running reduce? Should we remove them here?
-    global_log.info("step14_his_hbonds: Estimate optimal proton placement in Histidines")
-    global_paths["step14_his_hbonds"]["input_pdb_path"] = last_pdb_path
-    pdb4amber_run(**global_paths["step14_his_hbonds"], properties=global_prop["step14_his_hbonds"])
-    pKa_results = add_reduce_his_resnames(pKa_results, global_paths["step14_his_hbonds"]["output_pdb_path"], global_log)
-            
-    # STEP 15: Choose protonation states for titratable residues
-    global_log.info("step15_titrate: Choose protonation states for titratable residues") 
-    global_paths["step15_titrate"]["input_structure_path"] = last_pdb_path
-    global_prop["step15_titrate"]["pKa_results"] = pKa_results
-    biobb_titrate(**global_paths["step15_titrate"], properties=global_prop["step15_titrate"], global_log=global_log)
-    last_pdb_path = global_paths["step15_titrate"]["output_structure_path"]
-    
-    # NOTE: Manually add Glutamine protonation states - assume model pKa value 
-    
+
+    # STEPS 13-15: Determine protonation states of titratable residues.
+    # Skipped when keeping input hydrogens, so the input protonation is left unchanged.
+    if not keep_hs:
+        # STEP 13: Estimate pKa of titratable residues with propka
+        # We need standardized residue names for propka! Otherwise it will skip them
+        global_log.info("step13_propka: Estimate protonation state of titratable residues from empirical pKa calculation with propka")
+        global_paths["step13_propka"]["input_structure_path"] = last_pdb_path
+        biobb_propka(**global_paths["step13_propka"], properties=global_prop["step13_propka"], global_log=global_log)
+        pKa_results = propka_summary(global_paths["step13_propka"]["output_summary_path"])
+
+        # STEP 14: Run reduce from Amber Tools to estimate optimal proton placement in histidines
+        global_log.info("step14_his_hbonds: Estimate optimal proton placement in Histidines")
+        global_paths["step14_his_hbonds"]["input_pdb_path"] = last_pdb_path
+        pdb4amber_run(**global_paths["step14_his_hbonds"], properties=global_prop["step14_his_hbonds"])
+        pKa_results = add_reduce_his_resnames(pKa_results, global_paths["step14_his_hbonds"]["output_pdb_path"], global_log)
+
+        # STEP 15: Choose protonation states for titratable residues
+        global_log.info("step15_titrate: Choose protonation states for titratable residues")
+        global_paths["step15_titrate"]["input_structure_path"] = last_pdb_path
+        global_prop["step15_titrate"]["pKa_results"] = pKa_results
+        biobb_titrate(**global_paths["step15_titrate"], properties=global_prop["step15_titrate"], global_log=global_log)
+        last_pdb_path = global_paths["step15_titrate"]["output_structure_path"]
+
+        # NOTE: Manually add Glutamine protonation states - assume model pKa value
+    else:
+        global_log.info("step13_propka/step14_his_hbonds/step15_titrate: Keeping input hydrogens, skipping protonation state determination")
+
     if output_format == 'amber':
-        # STEP 16: run pdb4amber to generate final PDB file (with hydrogens?)
-        # NOTE: will this protonate according to the residue names? 
+        # STEP 16: run pdb4amber to generate final PDB file (rebuilds hydrogens unless keep_hs)
         global_log.info("step16_pdb4amber: Generate final PDB file with hydrogens")
+        # When keeping input H, steps 13-15 were skipped, so point pdb4amber at the last produced structure
+        # (the config dependency references step15_titrate, which did not run)
+        if keep_hs:
+            global_paths["step16_pdb4amber"]["input_pdb_path"] = last_pdb_path
         pdb4amber_run(**global_paths["step16_pdb4amber"], properties=global_prop["step16_pdb4amber"])
         last_pdb_path = global_paths["step16_pdb4amber"]["output_pdb_path"]
     elif output_format == 'gromacs':
