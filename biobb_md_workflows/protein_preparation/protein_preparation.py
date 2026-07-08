@@ -210,31 +210,31 @@ def get_pdb_code(pdb_file: str) -> Union[str, None]:
 # Other helpers
 def rename_ss_bonds(pdb_file: str, format: Literal['standard', 'gromacs', 'amber']) -> str:
     """ 
-    Read a pdb file and rename CYS residues marking disulfide bonds
+    Read a PDB file and convert the nomenclature of cysteine residues involved 
+    in disulfide bonds according to the specified target format.
     
-    Formats:
+    Format Conversions:
+        - amber:    Converts 'CYS2' to 'CYX'
+        - gromacs:  Converts 'CYX' to 'CYS2'
+        - standard: Converts 'CYS2' or 'CYX' to 'CYS'
     
-        - gromacs:
-            CYS -> CYS2
-        - amber:
-            CYS -> CYX
-    
-    CYX residues are recognized as cysteine residues with a disulfide bond only from GROMACS version 2024.
-    Older versions will need CYS2 or CYS as cysteine name to form bonds in the topology.
+    Note:
+        CYX residues are recognized as cysteine residues with a disulfide bond 
+        only from GROMACS version 2024. Older versions require CYS2 or CYS 
+        as the cysteine name to form bonds in the topology. 
+        See https://gitlab.com/gromacs/gromacs/-/work_items/4929
     
     Parameters
     ----------
-    
     pdb_file : str
-        Path to the PDB file.
-    format : str
-        Format to rename the CYS residues. Can be 'standard', 'gromacs' or 'amber'
+        Path to the input PDB file.
+    format : Literal['standard', 'gromacs', 'amber']
+        Target formatting convention for the disulfide-bonded CYS residues.
     
-    Outputs
+    Returns
     -------
-    
-    new_pdb_file : str
-        Path to the new PDB file with the renamed CYX residues.    
+    str
+        Path to the newly generated PDB file with the renamed residues.
     """
     
     # Check requested format
@@ -249,7 +249,7 @@ def rename_ss_bonds(pdb_file: str, format: Literal['standard', 'gromacs', 'amber
     with open(pdb_file, 'r') as f:
         lines = f.readlines()
     
-    # Replace all CYX residues with CYS2
+    # Replace residues based on format
     with open(new_pdb_file, 'w') as f:
         for line in lines:
             # Check if line is an ATOM/HETATM record to avoid modifying HEADER/REMARK lines
@@ -296,7 +296,7 @@ def rename_his(pdb_file: str, format: Literal['standard', 'gromacs', 'amber']) -
             
         HIS -> HIS
     
-    Paramaters
+    Parameters
     ----------
     
     pdb_file : str
@@ -1240,8 +1240,7 @@ def main():
     
     parser.add_argument('--skip_ss_bonds', action='store_true',
                         help="""Skip the addition of disulfide bonds to the protein according to a distance criteria. 
-                        Otherwise the missing atoms in the side chains of the PDB structure will be modeled using 
-                        'biobb_structure_checking' and the 'Modeller suite' (if the Modeller key is given). Default: False""",
+                        No SS bonds will be considered if True. Default: False""",
                         required=False, default=False)
 
     parser.add_argument('--skip_amides_flip', action='store_true', dest='skip_amides_flip',
