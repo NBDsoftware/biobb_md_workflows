@@ -69,6 +69,25 @@ gmx_4letter_resnames = [
     'HIS1'
 ]
 
+# Reverse index mapping any titratable variant resname to its (base residue, protonation index).
+# Built from both format maps so amber (HID, ...) and gromacs (HISD, ...) names are recognized.
+titra_variant_index = {}
+for _fmt_resnames in (amber_titra_resnames, gmx_titra_resnames):
+    for _base, _names in _fmt_resnames.items():
+        for _idx, _name in enumerate(_names):
+            titra_variant_index[_name] = (_base, _idx)
+
+# Disulfide-bond cysteine markers and their per-format target name
+ss_bond_resnames = {'CYX', 'CYS2'}
+ss_target_resname = {'amber': 'CYX', 'gromacs': 'CYS2'}
+
+# Non-standard titratable variant names (i.e. those that differ from the plain base name).
+# These are the names captured before standardization and restored at the end.
+nonstd_titra_resnames = {
+    'LYN', 'ASH', 'GLH', 'HID', 'HIE', 'HIP',                       # amber variants
+    'LYSN', 'ARGN', 'ASPH', 'GLUH', 'HISD', 'HISE', 'HISH', 'HIS1'  # gromacs variants
+}
+
 # Biopython helpers
 def highest_occupancy_altlocs(pdb_file, global_log) -> List[str]:
     """
@@ -406,9 +425,174 @@ def rename_ter(pdb_file: str, format: Literal['standard', 'gromacs', 'amber']) -
                             line = line[:12] + " CA " + line[16:]
                             
             f.write(line)
-    
-    return new_pdb_file           
-# Propka 
+
+    return new_pdb_file
+
+# Preservation of user-provided special residue names (SS bonds / protonation states)
+def capture_special_resnames(pdb_file: str) -> Dict:
+    """
+    Record the residues in a PDB file that carry a user-provided special residue name:
+    disulfide cysteines (CYX/CYS2) and non-standard titratable variants (HID/HIE/HIP,
+    HISD/HISE/HISH/HIS1, ASH/ASPH, GLH/GLUH, LYN/LYSN, ARGN).
+
+    These names are captured before the workflow standardizes them for the Modeller /
+    structure-checking steps, so they can be restored at the end.
+
+    Parameters
+    ----------
+    pdb_file : str
+        Path to the PDB file to parse.
+
+    Returns
+    -------
+    Dict
+        Mapping {(chain_id, resnum): resname} keyed by residue identity, using the residue
+        numbering present in the input file.
+    """
+    captured = {}
+    with open(pdb_file, 'r') as f:
+        for line in f:
+            if len(line) > 26 and (line.startswith("ATOM") or line.startswith("HETATM")):
+                resname = line[17:21].strip()
+                if resname in ss_bond_resnames or resname in nonstd_titra_resnames:
+                    chain_id = line[21]
+                    resnum = line[22:26].strip()
+                    if resnum:
+                        captured[(chain_id, int(resnum))] = resname
+    return captured
+
+def translate_special_resnames(captured: Dict, mapping_json_path: str, global_log) -> Dict:
+    """
+    Translate the residue keys captured by `capture_special_resnames` from the original
+    numbering to the renumbered one produced by `renumber_structure` (step8).
+
+    Parameters
+    ----------
+    captured : Dict
+        Mapping {(chain_id, original_resnum): resname}.
+    mapping_json_path : str
+        Path to the mapping.json written by renumber_structure. Its "residues" entry maps
+        chain -> {original_resnum(str): new_resnum(str)}.
+    global_log :
+        Logger object for logging messages.
+
+    Returns
+    -------
+    Dict
+        Mapping {(chain_id, new_resnum): resname}. Residues absent from the mapping are dropped.
+    """
+    import json
+    with open(mapping_json_path, 'r') as f:
+        residue_mapping = json.load(f).get("residues", {})
+
+    translated = {}
+    for (chain_id, resnum), resname in captured.items():
+        new_resnum = residue_mapping.get(chain_id, {}).get(str(resnum))
+        if new_resnum is None:
+            global_log.warning(f"Residue {chain_id}{resnum} ({resname}) not found in renumbering map. Its name will not be preserved.")
+            continue
+        translated[(chain_id, int(new_resnum))] = resname
+    return translated
+
+def standardize_titra_variants(pdb_file: str) -> str:
+    """
+    Convert the ASP/GLU/LYS/ARG protonation variants to their standard 3-letter base name,
+    so the Modeller / structure-checking steps (which do not recognize the gromacs 4-letter
+    names) process these residues. HIS and CYS variants are handled separately by
+    `rename_his` and `rename_ss_bonds`.
+
+    Parameters
+    ----------
+    pdb_file : str
+        Path to the input PDB file.
+
+    Returns
+    -------
+    str
+        Path to the new PDB file with the standardized residue names.
+    """
+    variants = {'ASH', 'ASPH', 'GLH', 'GLUH', 'LYN', 'LYSN', 'ARGN'}
+
+    parent_path = Path(pdb_file).parent
+    pdb_name = Path(pdb_file).stem
+    new_pdb_file = os.path.join(parent_path, f"{pdb_name}_stdtitra.pdb")
+
+    with open(pdb_file, 'r') as f:
+        lines = f.readlines()
+
+    with open(new_pdb_file, 'w') as f:
+        for line in lines:
+            if len(line) > 20 and (line.startswith("ATOM") or line.startswith("HETATM")):
+                resname = line[17:21].strip()
+                if resname in variants:
+                    base = titra_variant_index[resname][0]
+                    # Write the 3-letter base name padded to 4 chars (cols 18-21)
+                    line = line[:17] + f"{base:<4}" + line[21:]
+            f.write(line)
+
+    return new_pdb_file
+
+def restore_special_resnames(pdb_file: str, resmap: Dict, output_format: Literal['amber', 'gromacs'],
+                             restore_ss: bool, restore_titra: bool, global_log) -> str:
+    """
+    Restore the user-provided special residue names captured earlier, expressed in the
+    requested output format. Only the categories enabled by the flags are restored.
+
+    Parameters
+    ----------
+    pdb_file : str
+        Path to the input PDB file (with residue numbering matching `resmap`).
+    resmap : Dict
+        Mapping {(chain_id, resnum): original_resname} of residues to restore.
+    output_format : Literal['amber', 'gromacs']
+        Target naming convention for the restored names.
+    restore_ss : bool
+        Whether to restore disulfide-bond cysteine names (CYX/CYS2).
+    restore_titra : bool
+        Whether to restore titratable protonation variant names.
+    global_log :
+        Logger object for logging messages.
+
+    Returns
+    -------
+    str
+        Path to the new PDB file with the restored residue names.
+    """
+    parent_path = Path(pdb_file).parent
+    pdb_name = Path(pdb_file).stem
+    new_pdb_file = os.path.join(parent_path, f"{pdb_name}_restored.pdb")
+
+    with open(pdb_file, 'r') as f:
+        lines = f.readlines()
+
+    with open(new_pdb_file, 'w') as f:
+        for line in lines:
+            if len(line) > 26 and (line.startswith("ATOM") or line.startswith("HETATM")):
+                chain_id = line[21]
+                resnum = line[22:26].strip()
+                key = (chain_id, int(resnum)) if resnum else None
+                original = resmap.get(key)
+                if original is not None:
+                    target = None
+                    if original in ss_bond_resnames:
+                        if restore_ss:
+                            target = ss_target_resname[output_format]
+                    elif original in titra_variant_index:
+                        if restore_titra:
+                            base, idx = titra_variant_index[original]
+                            target_names = titra_mapping[output_format].get(base)
+                            if target_names is not None and idx < len(target_names):
+                                target = target_names[idx]
+                            else:
+                                global_log.warning(f"Cannot express {original} ({chain_id}{resnum}) in {output_format} format. Leaving it as is.")
+                    if target is not None:
+                        # Write the target name padded to 4 chars (cols 18-21), preserving the rest
+                        line = line[:17] + f"{target:<4}" + line[21:]
+            f.write(line)
+
+    return new_pdb_file
+
+# Propka
 def biobb_propka(input_structure_path: str, output_summary_path: str, properties: dict, global_log) -> None:
     """ 
     A mock function to simulate the behaviour of a biobb that uses propka
@@ -948,10 +1132,10 @@ def protein_preparation(
             missing atoms in the side chains of the PDB structure will be modeled using 
             'biobb_structure_checking' and the 'Modeller suite' (if the Modeller key is given). 
             Default: False
-        skip_ss_bonds: 
-            Skip the addition of disulfide bonds to the protein according to a distance criteria. 
-            Otherwise the missing atoms in the side chains of the PDB structure will be modeled using 
-            'biobb_structure_checking' and the 'Modeller suite' (if the Modeller key is given).
+        skip_ss_bonds:
+            Skip the automatic distance-based detection of disulfide bonds. When set, disulfide
+            cysteines already marked in the input PDB (CYX for amber, CYS2 for gromacs) are preserved
+            in the output; if none are marked, no disulfide bonds are formed. Default: False.
         skip_amides_flip: 
             whether to flip clashing amides to relieve the clashes
         pH: 
@@ -961,8 +1145,10 @@ def protein_preparation(
             Manual selection of histidine protonation states (HID: 0, HIE: 1, HIP:2). 
             If given, the pKa estimation and the pH won't be used to protonate histidine residues. 
             Default: None. Example: '0 1 1'
-        keep_hs: 
-            Keep hydrogen atoms in the input PDB file. Otherwise they will be removed. Default: False
+        keep_hs:
+            Keep the hydrogen atoms in the input PDB file (otherwise they are removed). When set, the
+            protonation state determination (propka/reduce/titrate) is skipped and the titratable
+            protonation residue names marked in the input are preserved in the output. Default: False
         output_format:
             Output format of the PDB file. Can be 'amber' or 'gromacs'. Default: 'amber'.
         output_path: 
@@ -1018,9 +1204,17 @@ def protein_preparation(
     global_prop["step2_fixaltlocs"]["altlocs"] = highest_occupancy_altlocs(global_paths["step1_extractAtoms"]["input_structure_path"], global_log)
     fix_altlocs(**global_paths["step2_fixaltlocs"], properties=global_prop["step2_fixaltlocs"])
 
-    # Standardize some residue names - NOTE: to be improved
+    # Capture user-provided special residue names (SS bonds / protonation variants) before
+    # standardizing, so they can be restored at the end when --skip_ss_bonds / --keep_hs are set.
+    special_resnames = {}
+    if skip_ss_bonds or keep_hs:
+        special_resnames = capture_special_resnames(global_paths["step2_fixaltlocs"]["output_pdb_path"])
+
+    # Standardize residue names for the Modeller / structure-checking steps, which only
+    # recognize standard 3-letter names (gromacs 4-letter variants would be skipped).
     last_pdb_path = rename_his(global_paths["step2_fixaltlocs"]["output_pdb_path"], 'standard')
     last_pdb_path = rename_ss_bonds(last_pdb_path, 'standard')
+    last_pdb_path = standardize_titra_variants(last_pdb_path)
     
     # STEP 3: Add mutations if requested
     global_paths["step3_mutations"]["input_pdb_path"] = last_pdb_path
@@ -1107,6 +1301,10 @@ def protein_preparation(
     renumber_structure(**global_paths["step8_renumberstructure"], properties=global_prop["step8_renumberstructure"])
     last_pdb_path = global_paths["step8_renumberstructure"]["output_structure_path"]
 
+    # Translate captured special-residue keys to the renumbered identities produced by step8
+    if special_resnames:
+        special_resnames = translate_special_resnames(special_resnames, global_paths["step8_renumberstructure"]["output_mapping_json_path"], global_log)
+
     # STEP 9: Flip amide groups to relieve clashes
     if not skip_amides_flip:
         global_log.info("step9_fixamides: fix clashing amides")
@@ -1169,13 +1367,21 @@ def protein_preparation(
     else:
         global_log.info("step13_propka/step14_his_hbonds/step15_titrate: Keeping input hydrogens, skipping protonation state determination")
 
+    # Restore user-provided special residue names: disulfides (CYX/CYS2) when --skip_ss_bonds,
+    # and titratable protonation variants when --keep_hs. Done here so the numbering still
+    # matches step8; restored names survive the downstream pdb4amber / gromacs renaming.
+    if special_resnames and (skip_ss_bonds or keep_hs):
+        global_log.info("Restoring user-provided residue names (SS bonds / protonation states)")
+        last_pdb_path = restore_special_resnames(last_pdb_path, special_resnames, output_format,
+                                                 restore_ss=skip_ss_bonds, restore_titra=keep_hs,
+                                                 global_log=global_log)
+
     if output_format == 'amber':
         # STEP 16: run pdb4amber to generate final PDB file (rebuilds hydrogens unless keep_hs)
         global_log.info("step16_pdb4amber: Generate final PDB file with hydrogens")
-        # When keeping input H, steps 13-15 were skipped, so point pdb4amber at the last produced structure
-        # (the config dependency references step15_titrate, which did not run)
-        if keep_hs:
-            global_paths["step16_pdb4amber"]["input_pdb_path"] = last_pdb_path
+        # Point pdb4amber at the last produced structure: the config dependency references
+        # step15_titrate, which is skipped under --keep_hs and bypassed by the restore step.
+        global_paths["step16_pdb4amber"]["input_pdb_path"] = last_pdb_path
         pdb4amber_run(**global_paths["step16_pdb4amber"], properties=global_prop["step16_pdb4amber"])
         last_pdb_path = global_paths["step16_pdb4amber"]["output_pdb_path"]
     elif output_format == 'gromacs':
@@ -1247,8 +1453,10 @@ def main():
                         required=False, default=False)
     
     parser.add_argument('--skip_ss_bonds', action='store_true',
-                        help="""Skip the addition of disulfide bonds to the protein according to a distance criteria. 
-                        No SS bonds will be considered if True. Default: False""",
+                        help="""Skip the automatic detection of disulfide bonds based on a distance criteria.
+                        When set, any disulfide cysteines the user already marked in the input PDB
+                        (CYX for AMBER, CYS2 for GROMACS) are preserved in the output; if none are marked,
+                        no disulfide bonds are formed. Default: False""",
                         required=False, default=False)
 
     parser.add_argument('--skip_amides_flip', action='store_true', dest='skip_amides_flip',
@@ -1270,7 +1478,11 @@ def main():
                         required=False)
     
     parser.add_argument('--keep_hs', action='store_true',
-                        help="""Keep hydrogen atoms in the input PDB file. Otherwise they will be discarded. Default: False""",
+                        help="""Keep the hydrogen atoms in the input PDB file (otherwise they are discarded).
+                        When set, the protonation state determination (propka/reduce/titrate) is skipped and the
+                        titratable protonation residue names marked in the input (e.g. HID/HIE/HIP, ASH, GLH, LYN
+                        for AMBER; HISD/HISE/HISH, ASPH, GLUH, LYSN, ARGN for GROMACS) are preserved in the output.
+                        Default: False""",
                         required=False)
 
     parser.add_argument('--output_format', dest='output_format', type=str,
