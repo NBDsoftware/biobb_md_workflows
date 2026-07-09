@@ -24,7 +24,8 @@ from biobb_chemistry.acpype.acpype_convert_amber_to_gmx import acpype_convert_am
 
 def get_selected_ligands(pdb_path: str, selected_ligand_names:  Union[List[str], None], selected_chains: List[str], selected_model: int, global_log) -> List[Dict[str, str]]:
     """
-    Retrieve the selected ligands from the chains and model of interest of a PDB file. If selected_ligand_names is None, all ligands are extracted.
+    Retrieve the selected ligands from the chains and model of interest of a PDB file. 
+    If selected_ligand_names is None, all ligands are extracted.
     
     Inputs
     ------
@@ -466,7 +467,8 @@ def ligand_parameterization(
     os.makedirs(output_top_path, exist_ok=True)
     
     # Extract the ligands from the input PDB file
-    global_log.info(f"Searching selected ligands in the input PDB file: {' '.join(ligand_names)}")
+    log_ligand_names = ' '.join(ligand_names) if ligand_names else 'all'
+    global_log.info(f"Searching selected ligands in the input PDB file: {log_ligand_names}")
     selected_ligands = get_selected_ligands(input_pdb_path, ligand_names, chains, model, global_log)
     global_log.info(f"Found {len(selected_ligands)} ligands in the input PDB file: {', '.join([ligand['name'] for ligand in selected_ligands])}")
     
