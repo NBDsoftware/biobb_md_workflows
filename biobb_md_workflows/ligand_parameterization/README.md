@@ -58,14 +58,14 @@ cofactor with custom parameters alongside a GAFF-parameterized ligand).
 Get protonation right first: it fixes the ligand's net charge, and GAFF/acpype derives the AM1-BCC
 partial charges from the protonated 3D structure. Choose the tool with `--protonation_tool`:
 
-- `ambertools` (reduce, default) — completes hydrogens using the wwPDB HET connectivity dictionary and
-  optimizes OH/SH/NH₃ and Asn/Gln/His orientations. Models a **neutral environment: it ignores pH and
-  does not ionize acids/bases** (e.g. carboxylates stay protonated). Reliable for standard PDB ligands;
-  may skip or misplace hydrogens for novel molecules absent from the dictionary or with nonstandard atom names.
+- `ambertools` (reduce, default) — places hydrogens from local geometry and a connectivity dictionary
+  (the wwPDB Chemical Component Dictionary), then optimizes the rotatable polar hydrogens (OH/SH/NH) to satisfy local
+  hydrogen bonding and avoid steric clashes. It is **geometry/contact-based, not pKa-based**.
+  Reliable for standard PDB ligands, but may skip or misplace hydrogens for novel molecules absent from
+  the dictionary or with nonstandard atom names.
 - `obabel` — perceives bonds from the 3D coordinates and protonates for **pH 7.4** using tabulated
   per-group pKa rules. More robust for arbitrary/novel small molecules and assigns a physiological charge state.
-- `none` — keep the input protonation unchanged; use when the ligand is already correctly protonated
-  (e.g. from an upstream preparation tool).
+- `none` — keep the input protonation unchanged; use when the ligand is already correctly protonated (e.g. from an upstream preparation tool). Choose this path if your ligand is not protonated correctly or tautomers have to be taken into account. 
 
 acpype guesses the net charge from the protonation state; check it is reasonable and override with
 `--charges LIG:<q>` (GAFF path only) if it is wrong.
@@ -88,9 +88,9 @@ Files:
 
 ## Limitations
 
-- **Approximate protonation.** No rigorous pKa calculation is performed: `ambertools`/reduce assumes a
-  neutral environment (won't ionize groups) and `obabel` applies fixed tabulated pKa rules at pH 7.4.
-  Inspect ionizable groups and tautomers manually.
+- **Approximate protonation.** No rigorous pKa calculation is performed: `ambertools`/reduce is
+  geometry/contact-based and pH-agnostic, while `obabel` applies fixed
+  tabulated pKa rules at pH 7.4. In both cases the ligand is protonated in isolation from the protein, so hydrogen orientations do not reflect the binding site.Neither enumerates or selects tautomers for general ligands (reduce only does this for histidine, using the local H-bond network — a signal unavailable here since the ligand is protonated in isolation).
 - **GAFF / AM1-BCC quality.** The automatic path (antechamber + acpype) uses general atom types and
   semi-empirical charges. It covers most drug-like organic molecules but is unreliable for metals and
   metal coordination, uncommon elements, and unusual chemistries — prefer curated custom parameters there.
