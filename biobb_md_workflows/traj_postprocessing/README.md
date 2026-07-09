@@ -49,7 +49,7 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 | `--output_str` | `structure.pdb` | Output structure file name. |
 
 
-## Options recommendations
+## Recommendations
 
 ### Complete vs. fast processing
 

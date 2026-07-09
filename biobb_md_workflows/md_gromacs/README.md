@@ -85,7 +85,7 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 | `--output` | `output` | Output directory. |
 
 
-## Options recommendations
+## Recommendations
 
 ### Efficient running
 

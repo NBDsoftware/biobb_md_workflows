@@ -53,7 +53,7 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 | `--restart` | `False` | Restart from the last completed step. |
 | `--output` | `output` | Output directory. |
 
-## Options recommendations
+## Recommendations
 
 ### General
 

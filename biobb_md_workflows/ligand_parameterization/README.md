@@ -40,9 +40,9 @@ The `config.yml` is auto-generated from the CLI arguments into the output folder
 | `--output` | 'output' | Output directory. |
 
 
-## Options recommendations
+## Recommendations
 
-### Choosing a parameterization path
+### Parameters
 
 Prefer a curated custom AMBER parameter set when one exists: pass it with `--custom_parameters`
 (`<LIG>.frcmod` + `<LIG>.prep`, named after the ligand). These are literature-validated and keep the
