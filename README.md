@@ -4,42 +4,9 @@ These workflows use BioExcel Building Blocks (BioBB) to integrate different popu
 
 This repo covers the protein preparation, ligand parameterization, MD with GROMACS and trajectory post processing workflows.  Virtual-screening workflows (cavity_analysis, vs_autodock) live in [biobb_vs_workflows](https://github.com/NBDsoftware/biobb_vs_workflows).
 
-## Workflows
+## Documentation
 
-**protein_preparation**: prepares a protein structure for molecular dynamics simulations with GROMACS. It includes the following steps: structure cleaning, protonation, missing atom reconstruction, and topology generation.
-
-**ligand_parameterization**: prepares a ligand structure for molecular dynamics simulations with GROMACS. It reads in custom ligand parameters (e.g. those from the [Manchester University database](http://amber.manchester.ac.uk/)) and generates the topology and coordinate files for GROMACS. If no custom parameters are provided, it will generate them using the antechamber and GAFF.
-
-**md_gromacs**: runs a molecular dynamics simulation with GROMACS. It includes the following steps: energy minimization, equilibration, production run and trajectory post-processing. The workflow can be run with either a single or multiple replicas.
-
-**traj_postprocessing**: post-processes the raw trajectory of a molecular dynamics simulation with the recomended centering and imaging steps of the GROMACS manual. Note that results should be checked for each trajectory, as the centering and imaging steps may not be appropriate for all systems.
-
-## Installation
-
-Requirements: `git`, `conda`
-
-```bash
-git clone https://github.com/NBDsoftware/biobb_md_workflows.git
-cd biobb_md_workflows
-export KEY_MODELLER="HERE YOUR MODELLER KEY" # Only for academic use
-conda env create -f environment.yml
-conda activate biobb_md
-```
-
-## Usage
-
-Once installed, each workflow is available as a CLI command:
-
-| Command | Workflow |
-|---------|----------|
-| `protein_preparation` | [Protein preparation](biobb_md_workflows/protein_preparation/README.md) |
-| `ligand_parameterization` | [Ligand parameterization](biobb_md_workflows/ligand_parameterization/README.md) |
-| `md_gromacs` | [Molecular dynamics with GROMACS](biobb_md_workflows/md_gromacs/README.md) |
-| `traj_postprocessing` | [Trajectory post-processing](biobb_md_workflows/traj_postprocessing/README.md) |
-
-```bash
-protein_preparation --help
-```
+You can find workflow descriptions, installation, usage, and known limitations in the [Documentation](**https://nbdsoftware.github.io/biobb_md_workflows/**).
 
 ## Licensing
 
