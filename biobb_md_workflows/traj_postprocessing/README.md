@@ -53,22 +53,35 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 
 ### Complete vs. fast processing
 
-:::{admonition} 🚧 To be written
-:class: caution
-When to use the default `complete` path (whole → cluster → nojump → center →
-image → fit) versus `--fast` (center → image → fit only), and **why centering and
-imaging are system-dependent** — plus how to visually validate the processed
-trajectory (e.g. inspect in VMD/PyMOL, check the solute stays whole and centered).
-:::
+Each operation is a separate `gmx trjconv` call because PBC treatment and fitting cannot be combined in
+one pass — order matters, and the default **complete** path is the robust general case:
+
+1. **whole** (`-pbc whole`) — reconnect molecules broken across the box edge.
+2. **cluster** (`-pbc cluster`) — wrap all atoms around the solute center of mass (iteratively-updated).
+3. **extract reference** then **nojump** (`-pbc nojump`) — undo box jumps for a continuous trajectory.
+   The reference is the *clustered first frame* (dumped from step 2), not the raw run input: `nojump`
+   removes jumps relative to its `-s` reference, so a non-whole/non-clustered reference would undo
+   steps 1–2. This is the key ordering subtlety in the GROMACS suggested workflow.
+4. **center** (`-center`, `-ur compact`) on the atom nearest the solute's geometric center — this shifts
+   the system, so no `nojump` may follow.
+5. **image** (`-pbc mol`, `-ur compact`) — put every molecule's center of mass back in the box.
+6. **fit** (`-fit rot+trans` on the solute) — remove global rotation/translation.
+
+`--fast` keeps only center → image → fit. Use it when the solute is already whole and does not jump
+across the box (small single-chain solute, or a trajectory already made whole upstream).
+
+**Always inspect the result** in a viewer (VMD/PyMOL): `-pbc cluster` is only meaningful if you genuinely have a cluster and the molecules are not already broken; `-pbc nojump` keeps the trajectory continuous but lets molecules diffuse out of the box; and `-ur compact` is intended for the truncated-octahedron/rhombic-dodecahedron boxes `md_gromacs` produces. Confirm the solute stays whole and centered and that imaging did not split it.
 
 ### Selecting what to keep
 
-:::{admonition} 🚧 To be written
-:class: caution
-Guidance on `--keep_solvent`, `--keep_residues`, and extending the auto-detected
-groups with `--ions` / `--solvents` when solvent or ion residue names are not
-recognized automatically.
-:::
+By default only the solute is written and solvent/ions are stripped — the main disk-space saving of this
+step, and the recommended dry `.xtc` for analysis. The Solvent group is built by auto-detecting solvent
+and ion names from `--input_structure`; GROMACS's default `SOL`/`Ion` groups plus a few common ions
+(`K+`, `CL-`, `MG`) are recognized. If your solvent or ions carry **unusual names**, add them with
+`--solvents` (residue names, e.g. `TIP4 SPC`) / `--ions` (atom names, e.g. `NA+ CA2+`), otherwise they
+are counted as part of the solute and never stripped. To keep them, use `--keep_solvent` (writes the
+whole `System`); to retain a few specific residues (a ligand, key waters) alongside the solute, list
+their residue indices with `--keep_residues`.
 
 ## Output
 
@@ -83,5 +96,14 @@ Written into `--output`:
 
 ## Limitations
 
-- Centering and imaging are **system-dependent**. The recommended steps are not
-  appropriate for every system — always visually inspect the result.
+- **System-dependent PBC handling.** The recommended whole/cluster/nojump/center/image sequence is not
+  appropriate for every system (multiple solutes, membranes, dissociating complexes) — always visually
+  inspect the result.
+- **Whole reference structure.** `--input_structure` is the PBC reference for the whole/nojump
+  steps and the source of the centering atom; if it is itself broken across periodic boundaries, the
+  output will be wrong.
+- **Solvent/ion detection.** Solvent and ions are recognized by residue/atom name; anything
+  not in the GROMACS defaults or added via `--solvents`/`--ions` is treated as solute and not stripped.
+- **Fitting.** The `rot+trans` fit onto the solute discards overall
+  rotation/translation. A single reference frame is used (not progressive fitting), so very large conformational transitions may not fit
+  cleanly.
