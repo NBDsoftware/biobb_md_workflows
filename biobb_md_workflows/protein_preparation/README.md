@@ -127,7 +127,7 @@ Written into `--output`, organized by steps:
   sampling, typical errors below ~1 pKa unit but larger for buried, strongly-coupled, and histidine
   residues.Verify critical residues manually (`--his` for histidines).
 - **Loop modelling requires Modeller.** Modeller is **academic-use only** and needs a license key
-  (see [Installation](installation.md)); without it, missing loops are left unmodelled.
+  (see [Installation](https://nbdsoftware.github.io/biobb_md_workflows/installation.html)); without it, missing loops are left unmodelled.
 - **Standard protein residues only.** Waters, ions, ligands, cofactors, and modified/non-standard
   residues are removed at extraction — parameterize ligands and cofactors separately with the
   `ligand_parameterization` workflow.
