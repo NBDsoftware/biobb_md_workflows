@@ -6,23 +6,25 @@ Developed for the [European BioExcel](http://bioexcel.eu/) project, funded by th
 European Commission (EU Horizon Europe
 [101093290](https://cordis.europa.eu/project/id/101093290)).
 
+This repository covers protein preparation, ligand parameterization, MD with
+GROMACS, and trajectory post-processing. Related pipelines live in separate
+repositories: virtual screening in
+[biobb_vs_workflows](https://github.com/NBDsoftware/biobb_vs_workflows).
+
 ```{image} _static/bioexcel_logo.png
 :alt: BioExcel
 :width: 250px
 :target: https://bioexcel.eu/
+:align: center
 :class: only-light
 ```
 ```{image} _static/bioexcel_logo_white.png
 :alt: BioExcel
 :width: 250px
 :target: https://bioexcel.eu/
+:align: center
 :class: only-dark
 ```
-
-This repository covers protein preparation, ligand parameterization, MD with
-GROMACS, and trajectory post-processing. Related pipelines live in separate
-repositories: virtual screening in
-[biobb_vs_workflows](https://github.com/NBDsoftware/biobb_vs_workflows).
 
 ## Workflows
 
