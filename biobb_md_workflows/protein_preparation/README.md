@@ -55,33 +55,55 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 
 ## Recommendations
 
-### General
+### Structure fixing
 
-:::{admonition} 🚧 To be written
-:class: caution
-Make sure you select the chains you want with `--pdb_chains`; how to specify `--mutation_list`
-when to use `--cap_ter`; when and how to force
-histidine states with `--his`; Explain how accurate can propka be expected to be. Avoid providing a modeller key if the use is not academic, in this case modelling of missing loop is not yet supported. Beware that when working with PDB files, especially those from NMR structures, it’s often more convenient to disregard hydrogen (H) atoms. This is because, if hydrogen atoms are included, they need to be named exactly as specified by the force fields in GROMACS. Since naming conventions for hydrogen atoms vary, this can sometimes cause complications. If you want to keep the original coordinates of hydrogen atoms you'll probably need to rename them.
-:::
+Fix only the chains you intend to simulate: select them with `--pdb_chains` (e.g. `--pdb_chains A B`);
+everything else — extra copies, crystallographic partners, waters, ligands — is discarded at extraction.
+Fixing runs *before* protonation, a complete structure makes the downstream pKa estimate more meaningful.
 
-### Preserving input protonation states with `--keep_hs`
+- **Missing atoms vs loops.** Missing side-chain and backbone *atoms* are modelled without a Modeller
+  license; modelling missing *loops* (gaps in the chain) needs a `--modeller_key`. The
+  key is **academic-use only**. Skip modelling entirely with `--skip_bc_fix` / `--skip_sc_fix`.
+- **Mutations (`--mutation_list`).** Space-separated `Chain:WtResnumMut` with three-letter residue names,
+  e.g. `A:Arg220Ala B:Ser221Gly`.
+- **Capping termini (`--cap_ter`).** Add ACE/NME caps when the input is a fragment or truncated construct,
+  so the exposed backbone ends are not treated as charged N-/C-termini. Skip it when the termini are the
+  genuine chain ends.
+- **Output format (`--output_format`).** Pick `amber` or `gromacs` to match the downstream tool — it fixes
+  the residue-naming convention for protonation/disulfide states (`HID`/`HIE`/`HIP` vs `HISD`/`HISE`/`HISH`, `CYX` vs `CYS2`).
 
-:::{note}
-When `--keep_hs` is set, the original hydrogen atoms are kept and the automatic protonation
-state determination (propka + reduce + titration) is **skipped**. The titratable protonation
-residue names marked in the input PDB are therefore respected and written unchanged (converted
-only to the requested `--output_format`): `HID`/`HIE`/`HIP`, `ASH`, `GLH`, `LYN` for AMBER, and
-`HISD`/`HISE`/`HISH`, `ASPH`, `GLUH`, `LYSN`, `ARGN` for GROMACS. Residues left with a standard
-name (e.g. plain `HIS`) are not reassigned. Downstream, `md_gromacs`'s `pdb2gmx` reads these
-residue names to set the protonation state.
-:::
+### Protonation states
+
+Titratable residues (ASP, GLU, LYS, ARG, HIS) are protonated for the chosen `--ph` (default 7.0) from a
+`propka` pKa estimate — a residue is protonated when the pH is below its predicted pKa. propka is an
+**empirical** predictor: it estimates every pKa in a medium-sized protein in seconds and, for the vast
+majority of residues, is as reliable as far more expensive Poisson–Boltzmann or FEP methods. Two things to keep in mind:
+
+- **It reads a single static structure** — no conformational sampling — the estimate is only as good as
+  the structure. Be wary of buried or strongly-shifted residues in flexible regions, where the empirical model is least accurate.
+- **Histidine is the hardest case**. The workflow combines the propka pKa
+  with an AmberTools `reduce` H-bond-network optimization to choose the delta/epsilon tautomer, but when
+  you know the correct state — from the literature, a metal/heme contact, or inspection — set it explicitly
+  with `--his` (delta `0`, epsilon `1`, protonated `2`, heme-bound `3`; one value per HIS in order, e.g.
+  `0 1 1`). This overrides the pKa/pH estimate for histidine.
+
+### Keeping input hydrogens (`--keep_hs`)
+
+With `--keep_hs` the input hydrogens are kept and the whole protonation determination (propka + reduce +
+titration) is **skipped**: the titratable residue names already marked in the input (`HID`/`HIE`/`HIP`,
+`ASH`, `GLH`, `LYN` for AMBER; `HISD`/`HISE`/`HISH`, `ASPH`, `GLUH`, `LYSN`, `ARGN` for GROMACS) are
+preserved and only converted to `--output_format`; residues left with a standard name (plain `HIS`) are
+not reassigned. Use it when the protonation is already correct (e.g. from an upstream tool). Otherwise,
+for X-ray/NMR inputs it is usually easier to **discard** the input hydrogens (the default) and let the
+workflow re-place them: GROMACS requires hydrogen names to match the force field exactly and kept hydrogens often have to be renamed by hand to avoid `pdb2gmx` errors downstream.
 
 ### Disulfide bonds
 
-Same thing here with `--skip_ss_bonds`. To specify them manually instead, mark the
-bonded cysteines in the input PDB (`CYS2` for GROMACS — safer for old versions — or `CYX` for AMBER)
-and run with `--skip_ss_bonds`: automatic detection is turned off and the marked cysteines are
-preserved in the output. With `--skip_ss_bonds` and no marked cysteines, no disulfide bonds are formed.
+Disulfide bonds are detected automatically from a distance criterion and the paired cysteines renamed
+(`CYS2` for GROMACS — safer for GROMACS < 2024 — or `CYX` for AMBER). To set them manually instead, mark
+the bonded cysteines in the input PDB with `CYS2` or `CYX` and run with `--skip_ss_bonds`: automatic
+detection is turned off and the marked cysteines are preserved. With `--skip_ss_bonds` and no marked
+cysteines, no disulfide bonds are formed.
 
 
 ## Output
@@ -101,13 +123,15 @@ Written into `--output`, organized by steps:
 
 ## Limitations
 
-- **Limited protonation accuracy.** The pKa estimation uses propka, an heuristic algorithm that determines protonation states based on neighboring residues.
-- **Modeling of gaps in proteins requires Modeller**. Modeller is **academic-use only** and needs a
-  license key. See [Installation](installation.md).
-- **No support for custom force fields**.
-- **Non-standard residues** are not supported.
-- **Fixed-column PDB rewriting.** Residue renaming for protonation/disulfide
-  states relies on fixed-column PDB slicing. A malformed or non-standard input
-  PDB can silently produce wrong output here.
-- **Disulfide bonds.** By default the pipeline detects disulfide bonds automatically with
-  `biobb_structure_checking` using a distance criterion.
+- **Approximate protonation.** propka is an empirical, single-structure pKa predictor: no conformational
+  sampling, typical errors below ~1 pKa unit but larger for buried, strongly-coupled, and histidine
+  residues.Verify critical residues manually (`--his` for histidines).
+- **Loop modelling requires Modeller.** Modeller is **academic-use only** and needs a license key
+  (see [Installation](installation.md)); without it, missing loops are left unmodelled.
+- **Standard protein residues only.** Waters, ions, ligands, cofactors, and modified/non-standard
+  residues are removed at extraction — parameterize ligands and cofactors separately with the
+  `ligand_parameterization` workflow.
+- **Output naming is AMBER or GROMACS only.** Other force-field residue-naming conventions are not
+  supported.
+- **Fixed-column PDB rewriting.** Residue renaming for protonation/disulfide states relies on fixed-column
+  PDB slicing; a malformed or non-standard input PDB can silently produce wrong output here.
