@@ -6,7 +6,7 @@ This repo covers the protein preparation, ligand parameterization, MD with GROMA
 
 ## Documentation
 
-You can find workflow descriptions, installation, usage, and known limitations in the [Documentation](**https://nbdsoftware.github.io/biobb_md_workflows/**).
+You can find workflow descriptions, installation, usage, and known limitations in the [Documentation](https://nbdsoftware.github.io/biobb_md_workflows/).
 
 ## Licensing
 
