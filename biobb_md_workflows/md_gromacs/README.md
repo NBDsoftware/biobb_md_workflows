@@ -14,12 +14,12 @@ Ligand topologies produced by `ligand_parameterization` can be added with `--lig
 
 **Pipeline sections:**
 
-1. **Setup** — `pdb2gmx`, ligand insertion + restraints, simulation box, solvation, and ion generation. Skip solvation for an already-solvated input with `--skip_solvation`; skip backbone restraints with `--skip_restraints`. Stop here with `--setup_only`.
+1. **Setup** — generation of protonated GROMACS topology and coordinates with `pdb2gmx`, addition of restraints to all chains (protein and NA), insertion of ligand to the topology, generation of restraints for the ligand, creation of simulation box, solvation of the system, and generation of ions. Skip solvation for an already-solvated input with `--skip_solvation`; skip backbone restraints with `--skip_restraints` if the `.top` already includes the restraints you need. Stop here with `--setup_only`.
 2. **Equilibration** — energy minimization, then NVT and NPT equilibration with position restraints on solute heavy atoms. Stop after this with `--equil_only`.
 3. **Production** — production `mdrun` from the equilibrated structure. If `--input_plumed_path` (and optionally `--input_plumed_folder`) is given, the run uses PLUMED.
 4. **Analysis & post-processing** — RMSD, radius of gyration, and RMSF, followed by trajectory cleanup (dry/center/image/fit), shared with `traj_postprocessing`.
 
-**Execution:** single-node (`gmx` with thread-MPI/OpenMP) or multi-node (`gmx_mpi` with `--mpi_bin`/`--mpi_np`, e.g. `srun`/`mpirun`). GPU offload is enabled with `--use_gpu`.
+**Execution:** single-node (`gmx` with thread-MPI/OpenMP) or multi-node (`gmx_mpi` with `--mpi_bin`/`--mpi_np`, e.g. `srun`/`mpirun`). GPU offload is ensured with `--use_gpu`. (check if gpu offloading happens by default in mdrun)
 
 ## Usage
 
@@ -32,7 +32,7 @@ md_gromacs --input_pdb structure.pdb --prod_time 100 --temp 300 --output output
 md_gromacs --input_gro system.gro --input_top system.zip --use_gpu --output output
 ```
 
-The `config.yml` is auto-generated from the CLI arguments into `--output`. `--restart` resumes from the last completed step. Run `md_gromacs --help` for the full option list.
+The `config.yml` is auto-generated from the CLI arguments into `--output`. `--restart` resumes from the last completed step when re-run against the same output folder. Run `md_gromacs --help` for the full option list.
 
 ## Options
 
@@ -84,10 +84,47 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 | `--restart` | `False` | Restart from the last completed step. |
 | `--output` | `output` | Output directory. |
 
-## Outputs
 
-Written into `--output`, organized by section:
+## Options recommendations
 
-- `1_setup/`, `2_equil/`, `3_prod/`, `4_analysis/` — per-section working directories.
-- Post-processed trajectory and structure under `4_analysis/` (e.g. `fitted_traj.xtc`, `dry_structure.pdb`), plus the RMSD/Rgyr/RMSF analysis outputs.
+### Efficient running
+
+:::{admonition} 🚧 To be written
+:class: caution
+Practical performance advice: when to use GPU offload (`--use_gpu`); the
+difference between thread-MPI (`--num_threads_mpi`) and OpenMP
+(`--num_threads_omp`) and how to pick counts; single-node (`gmx`) vs multi-node
+(`gmx_mpi` + `--mpi_bin`/`--mpi_np`, e.g. `srun`/`mpirun`) execution; and how to
+match these to a SLURM job allocation. Reference the example `run.sl` scripts.
+:::
+
+Link GROMACs benchmarks
+
+### Simulation parameters
+
+:::{admonition} 🚧 To be written
+:class: caution
+Guidance on: selecting `--forcefield` (and that available force fields depend on
+the GROMACS build); `--ions_concentration`; `--temp`; the `--dt` time step
+(valid range 1–4 fs) and its interaction with constraints. Note that the **water
+model is fixed to TIP3P**, see the Limitations section below.
+:::
+
+
+## Output
+
+Files:
+
+Written into `--output`, organized by section: `1_setup/`, `2_equil/`, `3_prod/`, `4_analysis/`.
+
+- Post-processed trajectory and structure under `4_analysis/` (e.g. `step10_fit_traj/fitted_traj.xtc`, `step6_dry_str/dry_structure.pdb`), plus the RMSD/Rgyr/RMSF analysis outputs.
 - `config.yml` and `log.out` for inspection.
+
+## Limitations
+
+- No hydrogen-mass repartitioning option.
+- Position restraints during production are **all-or-nothing** — everything is
+  either restrained or free; there is no selective or progressively-released
+  restraint scheme.
+- The **water model is fixed to TIP3P**.
+- PLUMED input files are only activated during the production run, not during the equilibration.

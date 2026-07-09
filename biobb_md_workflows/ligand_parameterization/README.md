@@ -4,14 +4,13 @@ Generate force-field parameters (topology + coordinates) for the ligands and cof
 
 ## Description
 
-For each ligand found in the input PDB, the workflow branches on whether a custom AMBER parameter set is supplied:
+**Input modes** (resolved at runtime. Can be combined if there are different ligands. E.g. a cofactor with a parameter set and a ligand):
 
-- **Custom parameters** (`--custom_parameters` folder with matching `.frcmod` + `.prep` files, e.g. from the [Amber Parameter Database (Manchester)](http://amber.manchester.ac.uk/)): LEaP builds the AMBER topology, optionally converted to GROMACS. The ligand keeps the charge and protonation state of its template.
-- **No custom parameters:** the ligand is protonated (`--protonation_tool`), minimized (unless `--skip_min`), and parameterized with GAFF via antechamber/acpype.
+- `--input_pdb` + `--custom_parameters` — Build the topology using the parameter set ( `.frcmod` + `.prep` files). The ligands present in custom_parameters, keep the charge and protonation state of their template. The name of the files should be the name of the ligand they refer to. 
 
-The output is a folder of topology + coordinate files: `.gro` + `.itp` for GROMACS, or `.frcmod` + `.prep`/`.lib` for AMBER.
+- `--input_pdb` — when no custom parameter set is available, the ligand is protonated with (`--protonation_tool`), minimized (unless `--skip_min`), and parameterized with GAFF via antechamber and acpype.
 
-Note the per-format caveat: for **GROMACS**, the `.gro` and `.itp` must agree, so the workflow must be re-run for every new PDB (the coordinates change per system) before merging with the protein topology after `pdb2gmx`. For **AMBER**, `tleap` can reconstruct missing atoms from the `.prep`/`.lib` files, so existing `.frcmod` + `.prep`/`.lib` sets can be reused across PDBs without re-running.
+Note: for **GROMACS**, the coordinates `.gro` and topology `.itp` must agree, so the workflow must be re-run for every new PDB (the coordinates change for every system even if the ligand is the same). For **AMBER**, `tleap` can reconstruct missing atoms from the `.prep`/`.lib` files, so `.frcmod` + `.prep`/`.lib` sets can be reused across PDBs without re-running.
 
 ## Usage
 
@@ -40,7 +39,63 @@ The `config.yml` is auto-generated from the CLI arguments into the output folder
 | `--output_top_path` | 'topologies' inside `output` | Output folder for the ligand topologies/coordinates. |
 | `--output` | 'output' | Output directory. |
 
-## Outputs
+
+## Options recommendations
+
+### Choosing a parameterization path
+
+Prefer a curated custom AMBER parameter set when one exists: pass it with `--custom_parameters`
+(`<LIG>.frcmod` + `<LIG>.prep`, named after the ligand). These are literature-validated and keep the
+template's charge and protonation, so they are more reliable than automatically generated parameters.
+Common ligands and cofactors are available in the [Amber Parameter Database, Manchester](http://amber.manchester.ac.uk/).
+
+Otherwise the GAFF path parameterizes the ligand automatically (antechamber atom types + AM1-BCC
+charges) — adequate for most drug-like organic molecules. Both paths can run in the same job (e.g. a
+cofactor with custom parameters alongside a GAFF-parameterized ligand).
+
+### Charges and protonation
+
+Get protonation right first: it fixes the ligand's net charge, and GAFF/acpype derives the AM1-BCC
+partial charges from the protonated 3D structure. Choose the tool with `--protonation_tool`:
+
+- `ambertools` (reduce, default) — completes hydrogens using the wwPDB HET connectivity dictionary and
+  optimizes OH/SH/NH₃ and Asn/Gln/His orientations. Models a **neutral environment: it ignores pH and
+  does not ionize acids/bases** (e.g. carboxylates stay protonated). Reliable for standard PDB ligands;
+  may skip or misplace hydrogens for novel molecules absent from the dictionary or with nonstandard atom names.
+- `obabel` — perceives bonds from the 3D coordinates and protonates for **pH 7.4** using tabulated
+  per-group pKa rules. More robust for arbitrary/novel small molecules and assigns a physiological charge state.
+- `none` — keep the input protonation unchanged; use when the ligand is already correctly protonated
+  (e.g. from an upstream preparation tool).
+
+acpype guesses the net charge from the protonation state; check it is reasonable and override with
+`--charges LIG:<q>` (GAFF path only) if it is wrong.
+
+## Output
+
+Checklist:
+
+For GROMACS the
+`.gro`/`.itp` pair is system-specific and must be regenerated per PDB, whereas
+AMBER `.frcmod`/`.prep` sets are reusable. Note how these files are consumed by
+`md_gromacs` via `--ligands_folder`.
+Check the guessed charge of the ligand is reasonable when using GAFF/acpype to parameterize
+
+Files:
 
 - A `topologies/` folder with one topology + coordinate pair per ligand: `<LIG>.gro` + `<LIG>.itp` (GROMACS) or `<LIG>.frcmod` + `<LIG>.prep`/`.lib` (AMBER).
 - Per-ligand working directories and `log.out` for inspection.
+
+
+## Limitations
+
+- **Approximate protonation.** No rigorous pKa calculation is performed: `ambertools`/reduce assumes a
+  neutral environment (won't ionize groups) and `obabel` applies fixed tabulated pKa rules at pH 7.4.
+  Inspect ionizable groups and tautomers manually.
+- **GAFF / AM1-BCC quality.** The automatic path (antechamber + acpype) uses general atom types and
+  semi-empirical charges. It covers most drug-like organic molecules but is unreliable for metals and
+  metal coordination, uncommon elements, and unusual chemistries — prefer curated custom parameters there.
+- **Input atom names.** Nonstandard or duplicate atom names in the input PDB can break reduce and later steps.
+- **GROMACS outputs are system-specific.** `.gro`/`.itp` pairs must be regenerated per PDB; AMBER
+  `.frcmod`/`.prep` sets are reusable.
+
+
