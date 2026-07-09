@@ -405,7 +405,8 @@ def ligand_parameterization(
             list of ligand names in the PDB file to parameterize. By default, all ligands are parameterized.
         charges:  
             list of charges for the ligands to parameterize. Only used when no custom parameters are 
-            given and the ligand is parameterized using GAFF and antechamber through acpype. By default acpype will guess the charge based on the protonation state.
+            given and the ligand is parameterized using GAFF and antechamber through acpype. By default 
+            acpype will guess the charge based on the protonation state.
         chains:  
             chain ID of the ligands to parameterize. Default: A.
         model:  
