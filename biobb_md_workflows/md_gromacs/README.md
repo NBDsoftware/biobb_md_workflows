@@ -19,7 +19,7 @@ Ligand topologies produced by `ligand_parameterization` can be added with `--lig
 3. **Production** — production `mdrun` from the equilibrated structure. If `--input_plumed_path` (and optionally `--input_plumed_folder`) is given, the run uses PLUMED.
 4. **Analysis & post-processing** — RMSD, radius of gyration, and RMSF, followed by trajectory cleanup (dry/center/image/fit), shared with `traj_postprocessing`.
 
-**Execution:** single-node (`gmx` with thread-MPI/OpenMP) or multi-node (`gmx_mpi` with `--mpi_bin`/`--mpi_np`, e.g. `srun`/`mpirun`). GPU offload is ensured with `--use_gpu`. (check if gpu offloading happens by default in mdrun)
+**Execution:** single-node (`gmx` with thread-MPI/OpenMP) or multi-node (`gmx_mpi` with `--mpi_bin`/`--mpi_np`, e.g. `srun`/`mpirun`). GPU offload of the non-bonded and PME work is enabled with `--use_gpu` (`-nb gpu -pme gpu`).
 
 ## Usage
 
@@ -87,29 +87,47 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 
 ## Recommendations
 
-### Efficient running
+### Improving performance
 
-:::{admonition} 🚧 To be written
-:class: caution
-Practical performance advice: when to use GPU offload (`--use_gpu`); the
-difference between thread-MPI (`--num_threads_mpi`) and OpenMP
-(`--num_threads_omp`) and how to pick counts; single-node (`gmx`) vs multi-node
-(`gmx_mpi` + `--mpi_bin`/`--mpi_np`, e.g. `srun`/`mpirun`) execution; and how to
-match these to a SLURM job allocation. Reference the example `run.sl` scripts.
-:::
+GROMACS auto-detects the hardware and, left alone, makes near-optimal use of it: the
+defaults (`--num_threads_mpi 0`, `--num_threads_omp 0`) let `mdrun` choose the rank/thread
+split. Tune only when you need to fill a specific allocation, and only scale out as far as
+the system justifies — small systems saturate quickly, and adding ranks past the scaling
+limit wastes the allocation.
 
-Link GROMACs benchmarks
+- **Single node (default).** Uses the built-in thread-MPI. `--num_threads_mpi` sets the number of thread-MPI ranks (`-ntmpi`), `--num_threads_omp` the OpenMP threads per rank (`-ntomp`); their product should equal the cores you were given.
+- **GPU (`--use_gpu`).** Offloads the non-bonded and PME work to the GPU (`-nb gpu -pme gpu`); minimization always runs on CPU. For a single GPU one MPI rank is usually fastest (`--num_threads_mpi 1`) but you can add OpenMP threads; with N GPUs the number of MPI ranks must equal N. 
+- **Multi-node.** Requires a GROMACS built with external MPI: set `--gmx_bin gmx_mpi` and launch it through `--mpi_bin` (`srun`/`mpirun`). One rank per core scales well down to ~200 particles/core; beyond that, add OpenMP threads per rank. Match `--num_threads_mpi` and `--num_threads_omp` to your SLURM `--ntasks` and `--cpus-per-task` respectively.
 
 ### Simulation parameters
 
-:::{admonition} 🚧 To be written
-:class: caution
-Guidance on: selecting `--forcefield` (and that available force fields depend on
-the GROMACS build); `--ions_concentration`; `--temp`; the `--dt` time step
-(valid range 1–4 fs) and its interaction with constraints. Note that the **water
-model is fixed to TIP3P**, see the Limitations section below.
-:::
+The production protocol uses the leap-frog algorithm for integrating Newton’s equations of 
+motion. The neighbor search is done with the Verlet cut-off scheme. Electrostatics are computed 
+with the Fast smooth Particle-Mesh Ewald (SPME) algorithm. Van der Waals and Coulomb have a 1.0 nm, 
+cut-off, long-range dispersion correction for energy and pressure are applied togehter with LINCS
+constraints on bonds to hydrogen. The V-rescale thermostat and Parrinello-Rahman barostat are used. 
+See a copy of the input .mdp files below. 
 
+- **Force field (`--forcefield`, default `amber99sb-ildn`).** Must be one your GROMACS build
+  ships (run `pdb2gmx` to list them). The **water model is hard-coded to TIP3P** and the
+  non-bonded settings are fixed, thus a force field that expects a different water model 
+  or non-bonded treatment is inconsistent here (e.g. CHARMM* or ff19SB**).
+- **Time step (`--dt`, default 2 fs).** Only bonds to hydrogen are constrained, which makes
+  2 fs safe. The accepted range is 1–4 fs, but there is no hydrogen-mass repartitioning, so
+  **4 fs is not stable** here — stay at 2 fs.
+- **Temperature (`--temp`, default 300 K).** Sets both the thermostat reference and the
+  initial velocity generation. Solute and solvent use different temperature-coupling groups
+  and thus different V-rescale thermostats; pressure is held at 1 bar (Parrinello-Rahman)
+  during NPT and production.
+- **Salt (`--ions_concentration`, default 0.15 mol/L).** Added after neutralizing the
+  system's net charge.
+- **Equilibration length (`--equil_time`, default 1 ns per phase).** Short by default (1 ns
+  NVT + 1 ns NPT, heavy-atom position restraints on the solute); increase it for large,
+  membrane, or slowly-relaxing systems before trusting the production run.
+
+*: CHARMM employs a specific Lennard-Jones potential that uses a force-switching function, the .mdp must be carefully configured to replicate these physics correctly - not supported yet.
+
+**: needs OPC water model and matching ions
 
 ## Output
 
@@ -122,9 +140,196 @@ Written into `--output`, organized by section: `1_setup/`, `2_equil/`, `3_prod/`
 
 ## Limitations
 
-- No hydrogen-mass repartitioning option.
-- Position restraints during production are **all-or-nothing** — everything is
-  either restrained or free; there is no selective or progressively-released
-  restraint scheme.
-- The **water model is fixed to TIP3P**.
-- PLUMED input files are only activated during the production run, not during the equilibration.
+- **Fixed protocol.** Thermostat (V-rescale), barostat (Parrinello-Rahman, isotropic 1 bar),
+  cut-offs (1.0 nm), Verlet/PME scheme, dispersion correction, and the box (truncated
+  octahedron, 1.0 nm padding) cannot be changed for now.
+- **Water model fixed to TIP3P**, and the non-bonded settings are AMBER-style; other water
+  models / force-field families will be supported.
+- **No hydrogen-mass repartitioning**, so the time step is effectively capped at 2 fs.
+- **Restraints are all-or-nothing.** Solute heavy atoms are restrained at full strength
+  through both equilibration phases and then fully released for production; there is no
+  selective or progressively-released restraint schedule.
+- **PLUMED runs only in production**, not during equilibration.
+
+## Reference
+
+### MDP files used
+
+For the minimization
+
+```
+;Neighbour searching
+cutoff-scheme = Verlet
+ns-type = grid
+rcoulomb = 1.0
+vdwtype = cut-off
+rvdw = 1.0
+nstlist = 10
+rlist = 1
+
+;Eletrostatics
+coulombtype = PME
+
+;Periodic boundary conditions
+pbc = xyz
+ld-seed = 1
+```
+
+For the NVT equilibration:
+
+```
+;Bond parameters
+constraint-algorithm = lincs
+constraints = h-bonds
+lincs-iter = 1
+lincs-order = 4
+continuation = no
+
+;Neighbour searching
+cutoff-scheme = Verlet
+ns-type = grid
+rcoulomb = 1.0
+vdwtype = cut-off
+rvdw = 1.0
+nstlist = 10
+rlist = 1
+
+;Eletrostatics
+coulombtype = PME
+pme-order = 4
+fourierspacing = 0.12
+fourier-nx = 0
+fourier-ny = 0
+fourier-nz = 0
+ewald-rtol = 1e-5
+
+;Temperature coupling
+tcoupl = V-rescale
+tc-grps = Protein Non-Protein
+tau-t = 0.1	  0.1
+ref-t = 300 	  300
+
+;Pressure coupling
+pcoupl = no
+
+;Dispersion correction
+DispCorr = EnerPres
+
+;Velocity generation
+gen-vel = yes
+gen-temp = 300
+gen-seed = -1
+
+;Periodic boundary conditions
+pbc = xyz
+ld-seed = 1
+``` 
+
+For the NPT equilibration:
+
+```
+;Bond parameters
+constraint-algorithm = lincs
+constraints = h-bonds
+lincs-iter = 1
+lincs-order = 4
+continuation = yes
+
+;Neighbour searching
+cutoff-scheme = Verlet
+ns-type = grid
+rcoulomb = 1.0
+vdwtype = cut-off
+rvdw = 1.0
+nstlist = 10
+rlist = 1
+
+;Eletrostatics
+coulombtype = PME
+pme-order = 4
+fourierspacing = 0.12
+fourier-nx = 0
+fourier-ny = 0
+fourier-nz = 0
+ewald-rtol = 1e-5
+
+;Temperature coupling
+tcoupl = V-rescale
+tc-grps = Protein Non-Protein
+tau-t = 0.1	  0.1
+ref-t = 300 	  300
+
+;Pressure coupling
+pcoupl = Parrinello-Rahman
+pcoupltype = isotropic
+tau-p = 1.0
+ref-p = 1.0
+compressibility = 4.5e-5
+refcoord-scaling = com
+
+;Dispersion correction
+DispCorr = EnerPres
+
+;Velocity generation
+gen-vel = no
+
+;Periodic boundary conditions
+pbc = xyz
+ld-seed = 1
+```
+
+For the production run
+
+```
+;Bond parameters
+constraint-algorithm = lincs
+constraints = h-bonds
+lincs-iter = 1
+lincs-order = 4
+continuation = yes
+
+;Neighbour searching
+cutoff-scheme = Verlet
+ns-type = grid
+rcoulomb = 1.0
+vdwtype = cut-off
+rvdw = 1.0
+nstlist = 10
+rlist = 1
+
+;Eletrostatics
+coulombtype = PME
+pme-order = 4
+fourierspacing = 0.12
+fourier-nx = 0
+fourier-ny = 0
+fourier-nz = 0
+ewald-rtol = 1e-5
+
+;Temperature coupling
+tcoupl = V-rescale
+tc-grps = Protein Non-Protein
+tau-t = 0.1	  0.1
+ref-t = 300 	  300
+
+;Pressure coupling
+pcoupl = Parrinello-Rahman
+pcoupltype = isotropic
+tau-p = 1.0
+ref-p = 1.0
+compressibility = 4.5e-5
+refcoord-scaling = com
+
+;Dispersion correction
+DispCorr = EnerPres
+
+;Velocity generation
+gen-vel = no
+
+;Periodic boundary conditions
+pbc = xyz
+ld-seed = 1
+```
+
+
+
