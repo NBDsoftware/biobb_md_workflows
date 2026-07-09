@@ -43,6 +43,12 @@ html_static_path = ["_static"]
 html_show_sourcelink = False
 html_show_sphinx = False
 
+# Nostrum logo in the sidebar (top of every page); theme-aware light/dark variants.
+html_theme_options = {
+    "light_logo": "nostrum_logo.png",
+    "dark_logo": "nostrum_logo_white.png",
+}
+
 # -- Epilog -------------------------------------------------------------------
 rst_epilog = """
 
