@@ -11,3 +11,4 @@ traj_comp.xtc
 __pycache__/
 *.egg-info
 build/
+_build/
