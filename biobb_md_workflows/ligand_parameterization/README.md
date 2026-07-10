@@ -4,11 +4,21 @@ Generate force-field parameters (topology + coordinates) for the ligands and cof
 
 ## Description
 
-**Input modes** (resolved at runtime. Can be combined if there are different ligands. E.g. a cofactor with a parameter set and a ligand):
+Per ligand found in the input PDB (selected with `--ligands`/`--chains`/`--model`, or every heteroatom
+residue if omitted), the workflow:
 
-- `--input_pdb` + `--custom_parameters` — Build the topology using the parameter set ( `.frcmod` + `.prep` files). The ligands present in custom_parameters, keep the charge and protonation state of their template. The name of the files should be the name of the ligand they refer to. 
-
-- `--input_pdb` — when no custom parameter set is available, the ligand is protonated with (`--protonation_tool`), minimized (unless `--skip_min`), and parameterized with GAFF via antechamber and acpype.
+1. **Extracts** the ligand from the input PDB (`extract_heteroatoms`).
+2. **Builds its topology + coordinates**, branching on whether a custom AMBER parameter set is supplied
+   for that ligand name (`--ligand_parameters`):
+   - **Custom parameters available** — `leap_gen_top` builds the topology directly from the
+     `.frcmod`/`.prep` set (AMBER); converted to GROMACS `.itp`/`.gro` with `acpype_convert_amber_to_gmx`
+     when `--format gromacs`.
+   - **No custom parameters** — protonates the ligand (`--protonation_tool`), minimizes it
+     (`babel_minimize`, unless `--skip_min`), then parameterizes it with GAFF atom types and AM1-BCC
+     charges via antechamber/acpype (`acpype_params_gmx` or `acpype_params_ac`).
+3. **Copies** the resulting topology + coordinates into `--output_top_path`, renamed to the ligand name;
+   GROMACS `.top` files are stripped of their `[ defaults ]`/`[ molecules ]` sections and written as
+   `.itp`, so they can be `#include`d into a master topology.
 
 Note: for **GROMACS**, the coordinates `.gro` and topology `.itp` must agree, so the workflow must be re-run for every new PDB (the coordinates change for every system even if the ligand is the same). For **AMBER**, `tleap` can reconstruct missing atoms from the `.prep`/`.lib` files, so `.frcmod` + `.prep`/`.lib` sets can be reused across PDBs without re-running.
 
@@ -23,28 +33,40 @@ The `config.yml` is auto-generated from the CLI arguments into the output folder
 
 ## Options
 
+### Inputs
+
+Input modes are resolved at runtime and can be combined if there are different ligands. E.g. a cofactor with a parameter set and a ligand without:
+
+- `--input_pdb` + `--ligand_parameters` — Build the topology using the parameter set ( `.frcmod` + `.prep` files). The ligands present in ligand_parameters, keep the charge and protonation state of their template. The name of the files should be the name of the ligand they refer to. 
+
+- `--input_pdb` — when no custom parameter set is available, the ligand is protonated with (`--protonation_tool`), minimized (unless `--skip_min`), and parameterized with GAFF via antechamber and acpype.
+
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--input_pdb` | *required* | Input PDB file containing the ligands to parameterize. |
 | `--ligands` | all ligands | Ligand names (from the PDB) to parameterize. |
 | `--chains` | `A` | Chain IDs to extract ligands from. |
 | `--model` | `0` | Model number to extract ligands from. |
+| `--ligand_parameters` | `None` | Folder with `.frcmod` + `.prep` files (named by ligand); triggers the LEaP path. |
+
+### Parameters
+
+| Flag | Default | Description |
+|------|---------|-------------|
 | `--format` | `gromacs` | Output topology format: `gromacs` or `amber`. |
 | `--charges` | guessed | Per-ligand charges as `name:charge` (e.g. `JZ4:-2 FLP:1`). GAFF/acpype path only; by default acpype guesses from the protonation state. |
 | `--protonation_tool` | `ambertools` | Ligand protonation tool: `ambertools`, `obabel`, or `none`. |
 | `--skip_min` | `False` | Skip the minimization step. |
-| `--custom_parameters` | `None` | Folder with `.frcmod` + `.prep` files (named by ligand); triggers the LEaP path. |
 | `--forcefields` | `protein.ff14SB DNA.bsc1 gaff` | Force fields for LEaP (only used with custom parameters). See `$AMBERHOME/dat/leap/cmd/`. |
 | `--restart` | `False` | Restart from the last completed step. |
 | `--output_top_path` | 'topologies' inside `output` | Output folder for the ligand topologies/coordinates. |
 | `--output` | 'output' | Output directory. |
 
-
 ## Recommendations
 
 ### Parameters
 
-Prefer a curated custom AMBER parameter set when one exists: pass it with `--custom_parameters`
+Prefer a curated custom AMBER parameter set when one exists: pass it with `--ligand_parameters`
 (`<LIG>.frcmod` + `<LIG>.prep`, named after the ligand). These are literature-validated and keep the
 template's charge and protonation, so they are more reliable than automatically generated parameters.
 Common ligands and cofactors are available in the [Amber Parameter Database, Manchester](http://amber.manchester.ac.uk/).

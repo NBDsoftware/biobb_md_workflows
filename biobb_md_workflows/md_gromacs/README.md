@@ -4,22 +4,10 @@ Run a full GROMACS MD pipeline — system setup, equilibration, production, and 
 
 ## Description
 
-**Input modes** (mutually exclusive, resolved at runtime):
-
-- `--input_pdb` — build the system from a prepared PDB (runs `pdb2gmx`).
-- `--input_gro` + `--input_top` — start from a pre-built structure (`.gro`) and topology (`.zip`), skipping `pdb2gmx`.
-- `--input_tpr` + `--input_cpt` — resume a simulation from a checkpoint.
-
-Ligand topologies produced by `ligand_parameterization` can be added with `--ligands_folder`.
-
-**Pipeline sections:**
-
 1. **Setup** — generation of protonated GROMACS topology and coordinates with `pdb2gmx`, addition of restraints to all chains (protein and NA), insertion of ligand to the topology, generation of restraints for the ligand, creation of simulation box, solvation of the system, and generation of ions. Skip solvation for an already-solvated input with `--skip_solvation`; skip backbone restraints with `--skip_restraints` if the `.top` already includes the restraints you need. Stop here with `--setup_only`.
 2. **Equilibration** — energy minimization, then NVT and NPT equilibration with position restraints on solute heavy atoms. Stop after this with `--equil_only`.
 3. **Production** — production `mdrun` from the equilibrated structure. If `--input_plumed_path` (and optionally `--input_plumed_folder`) is given, the run uses PLUMED.
 4. **Analysis & post-processing** — RMSD, radius of gyration, and RMSF, followed by trajectory cleanup (dry/center/image/fit), shared with `traj_postprocessing`.
-
-**Execution:** single-node (`gmx` with thread-MPI/OpenMP) or multi-node (`gmx_mpi` with `--mpi_bin`/`--mpi_np`, e.g. `srun`/`mpirun`). GPU offload of the non-bonded and PME work is enabled with `--use_gpu` (`-nb gpu -pme gpu`).
 
 ## Usage
 
@@ -38,6 +26,14 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 
 ### Inputs
 
+Input modes are mutually exclusive and resolved at runtime:
+
+- `--input_pdb` — build the system from a prepared PDB (runs `pdb2gmx`).
+- `--input_gro` + `--input_top` — start from a pre-built structure (`.gro`) and topology (`.zip`), skipping `pdb2gmx`.
+- `--input_tpr` + `--input_cpt` — resume a simulation from a checkpoint.
+
+Ligand topologies produced by `ligand_parameterization` can be added with `--ligands_folder`.
+
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--input_pdb` | `None` | Prepared PDB; protonation is taken from the residue names. |
@@ -51,6 +47,8 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 
 ### Execution
 
+Execution can be single-node (`gmx` with thread-MPI/OpenMP) or multi-node (`gmx_mpi` with `--mpi_bin`/`--mpi_np`, e.g. `srun`/`mpirun`). GPU offload of the non-bonded and PME work is enabled with `--use_gpu` (`-nb gpu -pme gpu`).
+
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--gmx_bin` | `gmx` | GROMACS binary (`gmx` single-node, `gmx_mpi` multi-node). |
@@ -61,7 +59,7 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 | `--use_gpu` | `False` | Add `-nb gpu -pme gpu` to `mdrun`. |
 | `--debug` | `False` | Verbose logging and keep temporary files. |
 
-### Simulation
+### Simulation parameters
 
 | Flag | Default | Description |
 |------|---------|-------------|
