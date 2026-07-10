@@ -4,7 +4,7 @@ channels:
   - bioconda
   - salilab
 dependencies:
-  - python==3.11
+  - python==3.12
   - pip
   - biobb_common>=5.2.2
   - biobb_structure_utils>=5.2.1
@@ -16,7 +16,7 @@ dependencies:
   - propka==3.5.1
   - modeller>=10.8
   - mdanalysis
-  - biopython<=1.81
+  - biopython
   - pip:
     - biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs
     - biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis
