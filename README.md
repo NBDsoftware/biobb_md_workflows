@@ -4,6 +4,12 @@ These workflows use BioExcel Building Blocks (BioBB) to integrate different popu
 
 This repo covers the protein preparation, ligand parameterization, MD with GROMACS and trajectory post processing workflows.  Virtual-screening workflows (cavity_analysis, vs_autodock) live in [biobb_vs_workflows](https://github.com/NBDsoftware/biobb_vs_workflows).
 
+## Tutorial
+
+New here? The [Colab tutorial](notebooks/biobb_md_workflows_colab_tutorial.ipynb) runs a full protein–ligand MD (PDB `3HTB` + ligand `JZ4`) end to end using the workflow commands — no local install required:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/NBDsoftware/biobb_md_workflows/blob/master/notebooks/biobb_md_workflows_colab_tutorial.ipynb)
+
 ## Documentation
 
 You can find workflow descriptions, installation, usage, and known limitations in the [Documentation](https://nbdsoftware.github.io/biobb_md_workflows/).

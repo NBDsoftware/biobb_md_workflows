@@ -1,0 +1,33 @@
+# Conda environment for running the biobb_md_workflows Colab tutorial.
+# It mirrors the repo's root environment.yml and ADDS the tools that are provided
+# as HPC modules on the cluster (and are therefore absent from environment.yml):
+# gromacs, ambertools, acpype, openbabel. The workflow packages are pip-installed
+# from their GitHub sources so the env is self-contained (no local checkout needed).
+name: biobb_md
+channels:
+  - conda-forge
+  - bioconda
+  - salilab
+dependencies:
+  - python==3.11
+  - pip
+  - biobb_common>=5.2.2
+  - biobb_structure_utils>=5.2.1
+  - biobb_model>=5.2.1
+  - biobb_amber>=5.2.1
+  - biobb_chemistry>=5.2.1
+  - biobb_io>=5.2.3
+  - biobb_pdb_tools>=5.2.1
+  - propka==3.5.1
+  - modeller>=10.8      # no license key needed for 3HTB (no backbone gaps to model)
+  - mdanalysis
+  - biopython<=1.81
+  # --- Tools that are HPC modules on the cluster, needed locally on Colab ---
+  - gromacs
+  - ambertools
+  - acpype
+  - openbabel
+  - pip:
+    - biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs
+    - biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis
+    - biobb_md_workflows @ git+https://github.com/NBDsoftware/biobb_md_workflows
