@@ -1,8 +1,11 @@
-# Conda environment for running the biobb_md_workflows tutorial ON GOOGLE COLAB.
-# Pinned to Python 3.12 to match the Colab kernel, so the notebook can import 
-# these packages directly via sys.path.
-# For running the notebook on a LOCAL Jupyter, use local_environment.yml instead.
-name: biobb_md
+# Conda environment for running the biobb_md_workflows tutorial on a LOCAL Jupyter.
+# Same as colab_environment.yml (Python 3.12, full MD stack + visualization) but it
+# ALSO ships jupyter + ipykernel so this one environment both builds the system and
+# hosts the notebook: `conda activate biobb_md_tutorial && jupyter lab`.
+# Named differently from the dev env (biobb_md) so it does not clobber it.
+# NOTE: create it from the repo root so the `-e .` pip install resolves to this repo:
+#   conda env create -f notebooks/local_environment.yml
+name: biobb_md_tutorial
 channels:
   - conda-forge
   - bioconda
@@ -21,12 +24,14 @@ dependencies:
   - modeller>=10.8      # no license key needed for 3HTB (no backbone gaps to model)
   - mdanalysis
   - biopython>=1.83
-  # --- Tools that are HPC modules on the cluster, needed locally on Colab ---
+  # --- Tools that are HPC modules on the cluster, needed locally ---
   - gromacs
   - ambertools
   - acpype
   - openbabel
-  # --- Visualization (imported by the notebook; Colab hosts the kernel itself) ---
+  # --- Notebook kernel + visualization (host + run the notebook from this env) ---
+  - jupyter
+  - ipykernel
   - ipywidgets
   - nglview
   - plotly
