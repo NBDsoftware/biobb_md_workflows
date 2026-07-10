@@ -96,14 +96,14 @@ def get_selected_ligands(pdb_path: str, selected_ligand_names:  Union[List[str],
                             ligands.append(ligand_info)
     return ligands
 
-def get_parameter_sets(custom_parameters_path: Union[str, None], global_log) -> Dict[str, Dict[str, str]]:
+def get_parameter_sets(ligand_parameters_path: Union[str, None], global_log) -> Dict[str, Dict[str, str]]:
     """
     Retrieve the custom parameter sets for one or more ligands.
     
     Inputs
     ------
     
-        custom_parameters_path  : Path to the folder with custom parameter sets for one or more ligands.
+        ligand_parameters_path  : Path to the folder with custom parameter sets for one or more ligands.
         global_log              : Logger object for logging messages.
     
     Returns
@@ -129,28 +129,28 @@ def get_parameter_sets(custom_parameters_path: Union[str, None], global_log) -> 
     parameter_sets = {}
     
     # Check if custom parameters are provided
-    if custom_parameters_path is None:
+    if ligand_parameters_path is None:
         return parameter_sets
     
     # Check if the custom parameters folder exists
-    if not os.path.exists(custom_parameters_path):
-        global_log.error(f"Folder {custom_parameters_path} not found")
+    if not os.path.exists(ligand_parameters_path):
+        global_log.error(f"Folder {ligand_parameters_path} not found")
         return parameter_sets
     
     # Search for custom parameter sets in the folder
-    for file_name in os.listdir(custom_parameters_path):  
+    for file_name in os.listdir(ligand_parameters_path):  
 
         # Check if the file is a .frcmod or .prep file
         if file_name.endswith('.frcmod'):
             ligand_name = file_name.replace('.frcmod', '')
             if ligand_name not in parameter_sets:
                 parameter_sets[ligand_name] = {}
-            parameter_sets[ligand_name]['frcmod'] = os.path.join(custom_parameters_path, file_name)
+            parameter_sets[ligand_name]['frcmod'] = os.path.join(ligand_parameters_path, file_name)
         elif file_name.endswith('.prep'):
             ligand_name = file_name.replace('.prep', '')
             if ligand_name not in parameter_sets:
                 parameter_sets[ligand_name] = {}
-            parameter_sets[ligand_name]['prep'] = os.path.join(custom_parameters_path, file_name)
+            parameter_sets[ligand_name]['prep'] = os.path.join(ligand_parameters_path, file_name)
 
     # Check every ligand has both .frcmod and .prep files
     for ligand_name, parameter_set in parameter_sets.items():
@@ -384,7 +384,7 @@ def ligand_parameterization(
             chains: List[str] = ['A'], 
             model: int = 0, 
             format: Literal['gromacs', 'amber'] = 'gromacs', 
-            custom_parameters: Optional[str] = None,
+            ligand_parameters: Optional[str] = None,
             protonation_tool: Literal['ambertools', 'obabel', 'none'] = 'ambertools', 
             skip_min: bool = False, 
             restart: bool = False,
@@ -414,7 +414,7 @@ def ligand_parameterization(
             model number of the ligands to parameterize. Default: 1.
         format:  
             format of the output topology files. Options: gromacs, amber. Default: gromacs.
-        custom_parameters:  
+        ligand_parameters:  
             path to folder with custom parameter sets for one or more ligands 
             (.prep and .frcmod files with the ligand name).
         protonation_tool:  
@@ -489,7 +489,7 @@ def ligand_parameterization(
             return
     
     # Find the custom parameters if any
-    parameter_sets = get_parameter_sets(custom_parameters, global_log)
+    parameter_sets = get_parameter_sets(ligand_parameters, global_log)
     
     # Find the charges of each ligand if any
     ligand_charges = {}
@@ -647,7 +647,7 @@ def main():
                         help='Format of the output topology files. Options: gromacs, amber. Default: gromacs.',
                         required=False, default='gromacs')
     
-    parser.add_argument('--custom_parameters', dest='custom_parameters',
+    parser.add_argument('--ligand_parameters', dest='ligand_parameters',
                         help='Path to folder with custom parameter sets for one or more ligands (.frcmod and .prep files with ligand name). LEaP will be used to generate the topology for these ligands. These ligands will rely on the charge given by the custom parameter set and the protonation state of its template.',
                         required=False, default=None)
     
@@ -681,7 +681,7 @@ def main():
         chains = args.chains, 
         model = args.model, 
         format = args.format, 
-        custom_parameters = args.custom_parameters, 
+        ligand_parameters = args.ligand_parameters, 
         protonation_tool = args.protonation_tool,
         skip_min = args.skip_min, 
         restart = args.restart, 

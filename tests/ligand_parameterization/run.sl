@@ -26,7 +26,7 @@ ligand_parameterization --config input.yml \
                         --forcefields protein.ff14SB \
                         --ligands HEM FLP \
                         --format gromacs \
-                        --custom_parameters $CUSTOM_PARAMETERS \
+                        --ligand_parameters $CUSTOM_PARAMETERS \
                         --output $OUTPUT_PATH
 
 # Remove report files
