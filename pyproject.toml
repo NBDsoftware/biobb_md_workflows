@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "biobb_md_workflows"
 version = "0.0.5"
-requires-python = ">=3.11"
+requires-python = "==3.12"
 dependencies = [
     "biobb_common>=5.2.2",
     "biobb_structure_utils>=5.2.1",
@@ -14,7 +14,7 @@ dependencies = [
     "biobb_pdb_tools>=5.2.1",
     "propka>=3.5.1",
     "mdanalysis",
-    "biopython>=1.83",
+    "biopython",
     # NBDSoftware forks — required by md_gromacs, traj_postprocessing.
     "biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs",
     "biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis",
