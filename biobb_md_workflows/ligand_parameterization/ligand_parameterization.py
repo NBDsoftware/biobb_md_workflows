@@ -245,7 +245,8 @@ def copy_out_files(file_paths: List[str], ligand_name: str, output_folder: str):
 def config_contents(
     input_pdb_path: str,
     forcefields: List[str],
-    restart: bool = False
+    restart: bool = False,
+    debug: bool = False
     ) -> str:
     """
     Returns the contents of the YAML configuration file as a string.
@@ -264,7 +265,7 @@ global_properties:
   working_dir_path: output                         # Workflow default output directory
   can_write_console_log: false                     # Verbose writing of log information
   restart: {to_yaml(restart)}                      # Skip steps already performed
-  remove_tmp: true
+  remove_tmp: {to_yaml(not debug)}                 # Remove temporal files
 
 # Step 1: extract heteroatoms from input PDB file
 step1_ligand_extraction:
@@ -386,9 +387,10 @@ def ligand_parameterization(
             format: Literal['gromacs', 'amber'] = 'gromacs', 
             ligand_parameters: Optional[str] = None,
             protonation_tool: Literal['ambertools', 'obabel', 'none'] = 'ambertools', 
-            skip_min: bool = False, 
+            skip_min: bool = False,
             restart: bool = False,
-            output_top_path: Optional[str] = None, 
+            debug: bool = False,
+            output_top_path: Optional[str] = None,
             output_path: Optional[str] = None
     ):
     '''
@@ -419,9 +421,11 @@ def ligand_parameterization(
             (.prep and .frcmod files with the ligand name).
         protonation_tool:  
             protonation tool to use. Options: ambertools, obabel. Default: ambertools.
-        skip_min:  
+        skip_min:
             skip the minimization step. Default: False.
-        output_top_path:  
+        debug:
+            whether to keep temporary files. Default: False
+        output_top_path:
             output path for the folder with topologies and coordinate files.
         output_path:  
             output path. Default: 'output'
@@ -449,7 +453,8 @@ def ligand_parameterization(
     config_args = {
         'input_pdb_path': input_pdb_path,
         'forcefields': forcefields,
-        'restart': restart
+        'restart': restart,
+        'debug': debug
     }
     configuration_path = create_config_file(output_path, **config_args)
 
@@ -662,7 +667,11 @@ def main():
     parser.add_argument('--restart', action='store_true',
                         help="Restart the workflow from the last completed step. Default: False",
                         required=False, default=False)
-    
+
+    parser.add_argument('--debug', action='store_true',
+                        help="Keep temporary files. Default: False",
+                        required=False, default=False)
+
     parser.add_argument('--output_top_path', dest='output_top_path',
                         help='Output path for the folder with ligand topologies (Amber: .frcmod and .prep/.lib files, Gromacs: .gro and .itp files).',
                         required=False, default=None)
@@ -683,9 +692,10 @@ def main():
         format = args.format, 
         ligand_parameters = args.ligand_parameters, 
         protonation_tool = args.protonation_tool,
-        skip_min = args.skip_min, 
-        restart = args.restart, 
-        output_top_path = args.output_top_path, 
+        skip_min = args.skip_min,
+        restart = args.restart,
+        debug = args.debug,
+        output_top_path = args.output_top_path,
         output_path=args.output_path
     )
 

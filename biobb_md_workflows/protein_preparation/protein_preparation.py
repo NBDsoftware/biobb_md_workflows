@@ -867,7 +867,8 @@ def config_contents(
     his: Optional[List] = None,
     keep_hs: bool = False,
     output_format: Literal['amber', 'gromacs'] = 'amber',
-    restart: bool = False
+    restart: bool = False,
+    debug: bool = False
     ) -> str:
     """
     Returns the contents of the YAML configuration file as a string.
@@ -906,7 +907,7 @@ global_properties:
   working_dir_path: output                                          # Workflow default output directory
   can_write_console_log: false                                      # Verbose writing of log information
   restart: {to_yaml(restart)}                                       # Skip steps already performed
-  remove_tmp: true                                                  # Remove temporal files
+  remove_tmp: {to_yaml(not debug)}                                  # Remove temporal files
 
 # Step 1: extract atoms from input PDB file
 step1_extractAtoms:
@@ -1103,6 +1104,7 @@ def protein_preparation(
     keep_hs: bool = False, 
     output_format: Literal['amber', 'gromacs'] = 'amber',
     restart: bool = False,
+    debug: bool = False,
     output_path: Optional[str] = None
     ):
     '''
@@ -1151,7 +1153,9 @@ def protein_preparation(
             protonation residue names marked in the input are preserved in the output. Default: False
         output_format:
             Output format of the PDB file. Can be 'amber' or 'gromacs'. Default: 'amber'.
-        output_path: 
+        debug:
+            whether to keep temporary files. Default: False
+        output_path:
             path to output folder
 
     Outputs
@@ -1182,7 +1186,8 @@ def protein_preparation(
         'his': his,
         'keep_hs': keep_hs,
         'output_format' : output_format,
-        'restart': restart
+        'restart': restart,
+        'debug': debug
     }
     configuration_path = create_config_file(output_path, **config_args)
 
@@ -1492,7 +1497,11 @@ def main():
     parser.add_argument('--restart', action='store_true',
                         help="Restart the workflow from the last completed step. Default: False",
                         required=False, default=False)
-    
+
+    parser.add_argument('--debug', action='store_true',
+                        help="Keep temporary files. Default: False",
+                        required=False, default=False)
+
     parser.add_argument('--output', dest='output_path', type=str,
                         help="Output path. Default: 'output' in the current working directory",
                         required=False, default='output')
@@ -1515,6 +1524,7 @@ def main():
         keep_hs=args.keep_hs, 
         output_format=args.output_format,
         restart=args.restart,
+        debug=args.debug,
         output_path=args.output_path)
 
 
