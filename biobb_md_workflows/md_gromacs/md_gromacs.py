@@ -1320,7 +1320,7 @@ step1_gro2pdb:
 step2_rmsd_equilibrated:
   tool: gmx_rms
   paths:
-    input_structure_path: dependency/step1_gro2pdb/output_str_path
+    input_structure_path: dependency/step11_mdrun_npt/output_gro_path
     input_traj_path: dependency/step2_mdrun_prod/output_xtc_path
     output_xvg_path: md_rmsdfirst.xvg
   properties:
@@ -1331,7 +1331,7 @@ step2_rmsd_equilibrated:
 step3_rmsd_experimental:
   tool: gmx_rms
   paths:
-    input_structure_path: dependency/step1_gro2pdb/output_str_path
+    input_structure_path: dependency/step9_genion/output_gro_path
     input_traj_path: dependency/step2_mdrun_prod/output_xtc_path
     output_xvg_path: md_rmsdexp.xvg
   properties:
@@ -2044,7 +2044,9 @@ def md_gromacs(
     analysis_paths['step1_gro2pdb']['input_top_path'] = prod_paths["step2_mdrun_prod"]['output_gro_path']
     analysis_paths['step1_gro2pdb']['input_structure_path'] = prod_paths["step2_mdrun_prod"]['output_gro_path']
     analysis_paths['step2_rmsd_equilibrated']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
+    analysis_paths['step2_rmsd_equilibrated']['input_structure_path'] = equil_paths["step11_mdrun_npt"]["output_gro_path"]
     analysis_paths['step3_rmsd_experimental']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
+    analysis_paths['step3_rmsd_experimental']['input_structure_path'] = setup_paths["step9_genion"]["output_gro_path"]
     analysis_paths['step4_rgyr']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
     analysis_paths['step5_rmsf']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
     analysis_paths['step7_dry_traj']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
