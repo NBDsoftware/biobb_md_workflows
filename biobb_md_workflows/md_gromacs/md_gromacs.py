@@ -1103,7 +1103,6 @@ step2_mdrun_min:
   tool: mdrun
   paths:
     input_tpr_path: dependency/step1_grompp_min/output_tpr_path
-    output_trr_path: min.trr
     output_gro_path: min.gro
     output_edr_path: min.edr
     output_log_path: min.log
@@ -1180,7 +1179,6 @@ step8_mdrun_nvt:
   paths:
     input_tpr_path: dependency/step7_grompp_nvt/output_tpr_path
     output_xtc_path: nvt.xtc
-    output_trr_path: nvt.trr
     output_gro_path: nvt.gro
     output_edr_path: nvt.edr
     output_log_path: nvt.log
@@ -1229,7 +1227,6 @@ step11_mdrun_npt:
   paths:
     input_tpr_path: dependency/step10_grompp_npt/output_tpr_path
     output_xtc_path: npt.xtc
-    output_trr_path: npt.trr
     output_gro_path: npt.gro
     output_edr_path: npt.edr
     output_log_path: npt.log
@@ -1295,7 +1292,6 @@ step2_mdrun_prod:
   paths:
     input_tpr_path: dependency/step1_grompp_md/output_tpr_path
     output_xtc_path: md.xtc
-    output_trr_path: md.trr
     output_gro_path: md.gro
     output_edr_path: md.edr
     output_log_path: md.log
@@ -2136,9 +2132,8 @@ def md_gromacs(
         if remove_raw_traj:
             global_log.info("Cleaning up raw production trajectories to save space...")
             raw_xtc = prod_paths["step2_mdrun_prod"]['output_xtc_path']
-            raw_trr = prod_paths["step2_mdrun_prod"]['output_trr_path']
             
-            for file_to_remove in [raw_xtc, raw_trr]:
+            for file_to_remove in [raw_xtc]:
                 if os.path.exists(file_to_remove):
                     os.remove(file_to_remove)
                     global_log.info(f"Removed: {file_to_remove}")
