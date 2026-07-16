@@ -20,7 +20,7 @@ residue if omitted), the workflow:
    GROMACS `.top` files are stripped of their `[ defaults ]`/`[ molecules ]` sections and written as
    `.itp`, so they can be `#include`d into a master topology.
 
-Note: for **GROMACS**, the coordinates `.gro` and topology `.itp` must agree, so the workflow must be re-run for every new PDB (the coordinates change for every system even if the ligand is the same). For **AMBER**, `tleap` can reconstruct missing atoms from the `.prep`/`.lib` files, so `.frcmod` + `.prep`/`.lib` sets can be reused across PDBs without re-running.
+Note: for the **GROMACS** format, the produced coordinates `.gro` must agree with the PDB file being simulated, so the workflow must be re-run for every new PDB (the coordinates change for every system even if the ligand is the same). For **AMBER**, `tleap` can parameterize from the `.prep`/`.lib` files independently of the ligand coordinates, so `.frcmod` + `.prep`/`.lib` sets can be reused across PDBs without re-running the ligand parameterization workflow.
 
 ## Usage
 
