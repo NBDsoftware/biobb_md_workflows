@@ -241,6 +241,43 @@ def copy_out_files(file_paths: List[str], ligand_name: str, output_folder: str):
             new_file_path = os.path.join(output_folder, f"{ligand_name}{file_extension}")
             shutil.copyfile(path, new_file_path)
 
+# Atomic numbers for the elements expected in bioorganic ligands/cofactors
+ATOMIC_NUMBERS = {
+    'H': 1, 'B': 5, 'C': 6, 'N': 7, 'O': 8, 'F': 9, 'NA': 11, 'MG': 12,
+    'AL': 13, 'SI': 14, 'P': 15, 'S': 16, 'CL': 17, 'K': 19, 'CA': 20,
+    'MN': 25, 'FE': 26, 'CO': 27, 'NI': 28, 'CU': 29, 'ZN': 30, 'SE': 34,
+    'BR': 35, 'MO': 42, 'I': 53,
+}
+
+def count_electrons(pdb_path: str):
+    '''
+    Count the total number of electrons of a neutral molecule in a PDB file (sum of atomic numbers).
+    Returns (total_electrons, unknown_elements) where unknown_elements is the set of element symbols
+    that could not be mapped to an atomic number (making the count unreliable if non-empty).
+
+    NOTE: parses ATOM/HETATM records directly rather than via Bio.PDB, because PDBParser silently
+    collapses atoms sharing the same name (e.g. Open Babel names every hydrogen "H"), which would
+    undercount atoms and give a wrong electron parity.
+    '''
+    total = 0
+    unknown = set()
+    with open(pdb_path) as pdb_file:
+        for line in pdb_file:
+            if not (line.startswith('ATOM') or line.startswith('HETATM')):
+                continue
+            # PDB element symbol lives in columns 77-78; fall back to the atom name (cols 13-16) if blank
+            element = line[76:78].strip().upper()
+            if not element:
+                element = ''.join(c for c in line[12:16] if c.isalpha()).upper()[:2]
+            z = ATOMIC_NUMBERS.get(element)
+            if z is None and len(element) == 2:
+                z = ATOMIC_NUMBERS.get(element[0])   # e.g. atom-name-derived "CA" carbon -> "C"
+            if z is None:
+                unknown.add(element)
+            else:
+                total += z
+    return total, unknown
+
 # YML construction
 def config_contents(
     input_pdb_path: str,
@@ -590,7 +627,24 @@ def ligand_parameterization(
             else:
                 ligand_prop["step4B_acpype_params_gmx"]["charge"] = None
                 ligand_prop["step4B_acpype_params_ac"]["charge"] = None
-                
+
+            # Electron-parity check: acpype runs SQM with multiplicity 1 (singlet), which needs an even
+            # electron count. electrons = sum(atomic numbers) - net charge; odd => SQM fails with a cryptic
+            # "odd number of electrons" error. Warn early with an actionable message. Charge defaults to 0
+            # when not given (acpype then guesses, defaulting to neutral).
+            acpype_input_path = ligand_paths["step4B_acpype_params_gmx"]["input_path"]
+            assumed_charge = ligand_charges.get(ligand_name, 0)
+            neutral_electrons, unknown_elements = count_electrons(acpype_input_path)
+            if unknown_elements:
+                global_log.warning(f"{ligand_name}: could not map elements {sorted(unknown_elements)} to atomic numbers; skipping electron-parity check")
+            elif (neutral_electrons - assumed_charge) % 2 != 0:
+                global_log.warning(
+                    f"{ligand_name}: odd electron count ({neutral_electrons - assumed_charge}) for net charge {assumed_charge}. "
+                    f"acpype/SQM uses multiplicity 1 (singlet), which requires an even count and will fail. "
+                    f"Likely a protonation problem (missing/extra H) or a wrong charge. "
+                    f"Check protonation (e.g. --protonation_tool obabel) or the --charges value for {ligand_name}."
+                )
+
             # Create gromacs topology
             if format == 'gromacs':
                 ligand_prop["step4B_acpype_params_gmx"]["basename"] = ligand_name
