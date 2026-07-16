@@ -20,4 +20,4 @@ dependencies:
   - pip:
     - biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs
     - biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis
-    - -e .                          # install biobb_md_workflows itself
+    - .                          # install biobb_md_workflows itself
