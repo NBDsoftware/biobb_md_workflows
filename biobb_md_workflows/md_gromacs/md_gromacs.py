@@ -1315,52 +1315,7 @@ step1_gro2pdb:
     input_structure_path: dependency/step2_mdrun_prod/output_gro_path
     output_str_path: topology.pdb
   properties:
-    binary_path: {gmx_bin}   
-    
-step2_rmsd_equilibrated:
-  tool: gmx_rms
-  paths:
-    input_structure_path: dependency/step11_mdrun_npt/output_gro_path
-    input_traj_path: dependency/step2_mdrun_prod/output_xtc_path
-    output_xvg_path: md_rmsdfirst.xvg
-  properties:
-    binary_path: {gmx_bin}     
-    selection: Backbone
-    xvg: xmgr 
-
-step3_rmsd_experimental:
-  tool: gmx_rms
-  paths:
-    input_structure_path: dependency/step9_genion/output_gro_path
-    input_traj_path: dependency/step2_mdrun_prod/output_xtc_path
-    output_xvg_path: md_rmsdexp.xvg
-  properties:
-    binary_path: {gmx_bin}     
-    selection: Backbone
-    xvg: xmgr 
-
-step4_rgyr:
-  tool: gmx_rgyr
-  paths:
-    input_structure_path: dependency/step1_gro2pdb/output_str_path
-    input_traj_path: dependency/step2_mdrun_prod/output_xtc_path
-    output_xvg_path: md_rgyr.xvg
-  properties:
-    binary_path: {gmx_bin}     
-    selection: Backbone
-    xvg: xmgr 
-    
-step5_rmsf:
-  tool: cpptraj_rmsf
-  paths:
-    input_top_path: dependency/step1_gro2pdb/output_str_path
-    input_traj_path: dependency/step2_mdrun_prod/output_xtc_path
-    output_cpptraj_path: md_rmsf.xmgr   # .dat, .agr, .xmgr, .gnu
-  properties:
-    start: 1
-    end: -1
-    steps: 1
-    mask: "!@H=" # by default cpptraj already strips solvent atoms
+    binary_path: {gmx_bin}
 
 step6_dry_str:
   tool: gmx_trjconv_str
@@ -1424,11 +1379,86 @@ step10_fit_traj:
     input_index_path: dependency/step4_make_ndx/output_ndx_path
     output_traj_path: fitted_traj.xtc
   properties:
-    binary_path: {gmx_bin}     
+    binary_path: {gmx_bin}
     fit_selection: "{solute_group}"
     output_selection: "{output_group}"
     center: false
     fit: rot+trans
+
+# NOTE: steps 11-16 run AFTER the trajectory post-processing (steps 6-10) so that the basic
+# analysis is computed on the clean, dry, imaged, centered and fitted trajectory
+# (step10_fit_traj). Running these on the raw trajectory produced PBC/imaging artifacts
+# (e.g. spurious single-residue RMSF spikes on surface residues near the box edge).
+
+# Dry reference for the equilibrated-structure RMSD (strip npt.gro to the output group so its
+# atom set matches the dry fitted trajectory)
+step11_dry_npt_ref:
+  tool: gmx_trjconv_str
+  paths:
+    input_structure_path: dependency/step11_mdrun_npt/output_gro_path  # Will be set by the workflow
+    input_top_path: path/to/prod.tpr                                   # Will be set by the workflow
+    input_index_path: path/to/index.ndx                                # Will be set by the workflow
+    output_str_path: npt_dry.gro
+  properties:
+    binary_path: {gmx_bin}
+    selection: "{output_group}"
+
+# Dry reference for the experimental-structure RMSD (strip genion.gro to the output group)
+step12_dry_genion_ref:
+  tool: gmx_trjconv_str
+  paths:
+    input_structure_path: dependency/step9_genion/output_gro_path      # Will be set by the workflow
+    input_top_path: path/to/prod.tpr                                   # Will be set by the workflow
+    input_index_path: path/to/index.ndx                                # Will be set by the workflow
+    output_str_path: genion_dry.gro
+  properties:
+    binary_path: {gmx_bin}
+    selection: "{output_group}"
+
+step13_rmsd_equilibrated:
+  tool: gmx_rms
+  paths:
+    input_structure_path: dependency/step11_dry_npt_ref/output_str_path
+    input_traj_path: dependency/step10_fit_traj/output_traj_path
+    output_xvg_path: md_rmsdfirst.xvg
+  properties:
+    binary_path: {gmx_bin}
+    selection: Backbone
+    xvg: xmgr
+
+step14_rmsd_experimental:
+  tool: gmx_rms
+  paths:
+    input_structure_path: dependency/step12_dry_genion_ref/output_str_path
+    input_traj_path: dependency/step10_fit_traj/output_traj_path
+    output_xvg_path: md_rmsdexp.xvg
+  properties:
+    binary_path: {gmx_bin}
+    selection: Backbone
+    xvg: xmgr
+
+step15_rgyr:
+  tool: gmx_rgyr
+  paths:
+    input_structure_path: dependency/step6_dry_str/output_str_path
+    input_traj_path: dependency/step10_fit_traj/output_traj_path
+    output_xvg_path: md_rgyr.xvg
+  properties:
+    binary_path: {gmx_bin}
+    selection: Backbone
+    xvg: xmgr
+
+step16_rmsf:
+  tool: cpptraj_rmsf
+  paths:
+    input_top_path: dependency/step6_dry_str/output_str_path
+    input_traj_path: dependency/step10_fit_traj/output_traj_path
+    output_cpptraj_path: md_rmsf.xmgr   # .dat, .agr, .xmgr, .gnu
+  properties:
+    start: 1
+    end: -1
+    steps: 1
+    mask: "!@H=" # by default cpptraj already strips solvent atoms
 """
 
 def create_config_file(output_path: str,
@@ -2043,13 +2073,9 @@ def md_gromacs(
     # Connect post-processing to previous steps
     analysis_paths['step1_gro2pdb']['input_top_path'] = prod_paths["step2_mdrun_prod"]['output_gro_path']
     analysis_paths['step1_gro2pdb']['input_structure_path'] = prod_paths["step2_mdrun_prod"]['output_gro_path']
-    analysis_paths['step2_rmsd_equilibrated']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
-    analysis_paths['step2_rmsd_equilibrated']['input_structure_path'] = equil_paths["step11_mdrun_npt"]["output_gro_path"]
-    analysis_paths['step3_rmsd_experimental']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
-    analysis_paths['step3_rmsd_experimental']['input_structure_path'] = setup_paths["step9_genion"]["output_gro_path"]
-    analysis_paths['step4_rgyr']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
-    analysis_paths['step5_rmsf']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
     analysis_paths['step7_dry_traj']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
+    # NOTE: the basic analysis (RMSD/Rgyr/RMSF, steps 13-16) is wired and run AFTER the
+    # trajectory post-processing (steps 6-10), so it uses the clean fitted trajectory.
 
     post_proces_steps = ['step6_dry_str', 'step7_dry_traj', 'step8_center', 'step9_image_traj', 'step10_fit_traj']
     for step in post_proces_steps:
@@ -2060,22 +2086,6 @@ def md_gromacs(
     # STEP 1: conversion of topology from gro to pdb
     global_log.info("step1_gro2pdb: Convert topology from GRO to PDB")
     gmx_trjconv_str(**analysis_paths["step1_gro2pdb"], properties=analysis_prop["step1_gro2pdb"])
-
-    # STEP 2: compute the RMSD with respect to equilibrated structure
-    global_log.info("step2_rmsd_equilibrated: Compute Root Mean Square deviation against equilibrated structure")
-    gmx_rms(**analysis_paths['step2_rmsd_equilibrated'], properties=analysis_prop['step2_rmsd_equilibrated'])
-    
-    # STEP 3: compute the RMSD with respect to minimized structure
-    global_log.info("step3_rmsd_experimental: Compute Root Mean Square deviation against minimized structure (exp)")
-    gmx_rms(**analysis_paths['step3_rmsd_experimental'], properties=analysis_prop['step3_rmsd_experimental'])
-
-    # STEP 4: compute the Radius of gyration
-    global_log.info("step4_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
-    gmx_rgyr(**analysis_paths['step4_rgyr'], properties=analysis_prop['step4_rgyr'])
-
-    # STEP 5: compute the RMSF
-    global_log.info("step5_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
-    cpptraj_rmsf(**analysis_paths['step5_rmsf'], properties=analysis_prop['step5_rmsf'])
 
     # STEP 6: obtain dry structure
     try:
@@ -2147,8 +2157,59 @@ def md_gromacs(
         )
     except Exception:
         global_log.exception("steps 7 to 10 failed with unexpected exception")
-        
-        
+
+    # STEPS 11-16: basic analysis on the post-processed (dry, imaged, centered, fitted)
+    # trajectory. Running these on the raw trajectory produced PBC/imaging artifacts (e.g.
+    # spurious single-residue RMSF spikes on surface residues crossing the box edge).
+    fitted_traj_path = analysis_paths["step10_fit_traj"]["output_traj_path"]
+    dry_structure_path = analysis_paths["step6_dry_str"]["output_str_path"]
+    if os.path.exists(fitted_traj_path) and os.path.exists(dry_structure_path):
+
+        # STEPS 11-12: build dry references (equilibrated npt, experimental genion) stripped to
+        # the output group so their atom set matches the dry fitted trajectory (needed by gmx rms)
+        analysis_paths["step11_dry_npt_ref"]["input_structure_path"] = equil_paths["step11_mdrun_npt"]["output_gro_path"]
+        analysis_paths["step11_dry_npt_ref"]["input_top_path"] = input_tpr_path
+        analysis_paths["step11_dry_npt_ref"]["input_index_path"] = input_ndx_path
+        analysis_paths["step12_dry_genion_ref"]["input_structure_path"] = setup_paths["step9_genion"]["output_gro_path"]
+        analysis_paths["step12_dry_genion_ref"]["input_top_path"] = input_tpr_path
+        analysis_paths["step12_dry_genion_ref"]["input_index_path"] = input_ndx_path
+
+        global_log.info("step11_dry_npt_ref: Build dry equilibrated reference for RMSD")
+        gmx_trjconv_str(**analysis_paths["step11_dry_npt_ref"], properties=analysis_prop["step11_dry_npt_ref"])
+        global_log.info("step12_dry_genion_ref: Build dry experimental reference for RMSD")
+        gmx_trjconv_str(**analysis_paths["step12_dry_genion_ref"], properties=analysis_prop["step12_dry_genion_ref"])
+
+        # Wire the metrics to the fitted trajectory and the dry references
+        analysis_paths["step13_rmsd_equilibrated"]["input_traj_path"] = fitted_traj_path
+        analysis_paths["step13_rmsd_equilibrated"]["input_structure_path"] = analysis_paths["step11_dry_npt_ref"]["output_str_path"]
+        analysis_paths["step14_rmsd_experimental"]["input_traj_path"] = fitted_traj_path
+        analysis_paths["step14_rmsd_experimental"]["input_structure_path"] = analysis_paths["step12_dry_genion_ref"]["output_str_path"]
+        analysis_paths["step15_rgyr"]["input_traj_path"] = fitted_traj_path
+        analysis_paths["step15_rgyr"]["input_structure_path"] = dry_structure_path
+        analysis_paths["step16_rmsf"]["input_traj_path"] = fitted_traj_path
+        analysis_paths["step16_rmsf"]["input_top_path"] = dry_structure_path
+
+        # STEP 13: compute the RMSD with respect to equilibrated structure
+        global_log.info("step13_rmsd_equilibrated: Compute Root Mean Square deviation against equilibrated structure")
+        gmx_rms(**analysis_paths["step13_rmsd_equilibrated"], properties=analysis_prop["step13_rmsd_equilibrated"])
+
+        # STEP 14: compute the RMSD with respect to minimized (experimental) structure
+        global_log.info("step14_rmsd_experimental: Compute Root Mean Square deviation against minimized structure (exp)")
+        gmx_rms(**analysis_paths["step14_rmsd_experimental"], properties=analysis_prop["step14_rmsd_experimental"])
+
+        # STEP 15: compute the Radius of gyration
+        global_log.info("step15_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
+        gmx_rgyr(**analysis_paths["step15_rgyr"], properties=analysis_prop["step15_rgyr"])
+
+        # STEP 16: compute the RMSF
+        global_log.info("step16_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
+        cpptraj_rmsf(**analysis_paths["step16_rmsf"], properties=analysis_prop["step16_rmsf"])
+
+    else:
+        global_log.error("Basic analysis (RMSD/Rgyr/RMSF) skipped: post-processed trajectory "
+                         "or dry structure not found. Check the trajectory post-processing steps (6-10).")
+
+
     # Print timing information to log file
     elapsed_time = time.time() - start_time
     global_log.info('')
