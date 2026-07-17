@@ -32,7 +32,8 @@ from biobb_analysis.gromacs.gmx_energy import gmx_energy
 from biobb_analysis.gromacs.gmx_image import gmx_image
 from biobb_analysis.gromacs.gmx_trjconv_trj import gmx_trjconv_trj
 from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
-from biobb_analysis.ambertools.cpptraj_rmsf import cpptraj_rmsf 
+from biobb_analysis.ambertools.cpptraj_rmsf import cpptraj_rmsf
+from biobb_analysis.ambertools.cpptraj_rms import cpptraj_rms
 from biobb_structure_utils.utils.cat_pdb import cat_pdb
 
 from biobb_md_workflows.common import to_yaml
@@ -176,7 +177,7 @@ def check_inputs(
     return used_modes[0]
 
 # Biopython helpers
-def get_ligands(ligands_top_folder: Union[str, None], global_log) -> List[Dict[str, str]]:
+def get_ligands(ligands_top_folder: Union[str, None], global_log) -> Dict[str, Dict[str, str]]:
     """
     Get a list of available ligands in the ligands topology folder. The function searches for all the 
     .itp and .gro files in the folder. If the folder is provided but doesn't exist or any .itp/.gro file 
@@ -1459,6 +1460,27 @@ step16_rmsf:
     end: -1
     steps: 1
     mask: "!@H=" # by default cpptraj already strips solvent atoms
+
+# Per-ligand RMSD (pose stability): ligand heavy-atom RMSD after aligning the complex, i.e.
+# how far the ligand drifts from its starting pose. Only run if a ligand is present. nofit is
+# used so the ligand is NOT re-superposed on itself (the trajectory is already fitted on the
+# complex in step10_fit_traj). Output path and mask are set per-ligand by the workflow.
+step17_rmsd_ligand:
+  tool: cpptraj_rms
+  paths:
+    input_top_path: dependency/step6_dry_str/output_str_path
+    input_traj_path: dependency/step10_fit_traj/output_traj_path
+    output_cpptraj_path: md_rmsd_ligand.xmgr   # .dat, .agr, .xmgr, .gnu
+  properties:
+    start: 1
+    end: -1
+    steps: 1
+    # Will be set by the workflow per ligand. Parentheses are REQUIRED: biobb builds the cpptraj
+    # strip as "!<mask>" and runs the RMSD on all surviving atoms; only "!(:LIG&!@H=)" negates the
+    # whole compound (keep ligand heavy atoms). Bare ":LIG&!@H=" would strip "(!:LIG)&(!@H=)",
+    # wrongly keeping the ligand plus every hydrogen in the system.
+    mask: "(:LIG&!@H=)"
+    nofit: true
 """
 
 def create_config_file(output_path: str,
@@ -2204,6 +2226,25 @@ def md_gromacs(
         # STEP 16: compute the RMSF
         global_log.info("step16_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
         cpptraj_rmsf(**analysis_paths["step16_rmsf"], properties=analysis_prop["step16_rmsf"])
+
+        # STEP 17: per-ligand RMSD (pose stability) - only if a ligand is present. Measured on the
+        # fitted trajectory with nofit, so it reflects ligand drift from the starting pose in the
+        # complex frame (gmx rms cannot fit-on-protein + rmsd-on-ligand).
+        if ligands_dict:
+            ligand_resnames = get_residue_types(dry_structure_path, list(ligands_dict))
+            missing = [lig for lig in ligands_dict if lig not in ligand_resnames]
+            if missing:
+                global_log.warning(f"step17_rmsd_ligand: ligand id(s) {missing} not found as residues "
+                                   f"in the dry structure (the id must match the residue name); skipping those.")
+            for ligand_name in ligand_resnames:
+                analysis_paths["step17_rmsd_ligand"]["input_traj_path"] = fitted_traj_path
+                analysis_paths["step17_rmsd_ligand"]["input_top_path"] = dry_structure_path
+                analysis_paths["step17_rmsd_ligand"]["output_cpptraj_path"] = f"md_rmsd_ligand_{ligand_name}.xmgr"
+                # Parens required so the cpptraj strip becomes "!(:LIG&!@H=)" (keep ligand heavy atoms);
+                # without them biobb would strip "(!:LIG)&(!@H=)", keeping the ligand plus all hydrogens.
+                analysis_prop["step17_rmsd_ligand"]["mask"] = f"(:{ligand_name}&!@H=)"
+                global_log.info(f"step17_rmsd_ligand: Compute ligand RMSD (pose stability) for {ligand_name}")
+                cpptraj_rms(**analysis_paths["step17_rmsd_ligand"], properties=analysis_prop["step17_rmsd_ligand"])
 
     else:
         global_log.error("Basic analysis (RMSD/Rgyr/RMSF) skipped: post-processed trajectory "
