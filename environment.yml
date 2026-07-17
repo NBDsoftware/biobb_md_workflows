@@ -13,11 +13,11 @@ dependencies:
   - biobb_chemistry>=5.2.1
   - biobb_io>=5.2.3
   - biobb_pdb_tools>=5.2.1
-  - biobb_gromacs>=5.2.1
-  - biobb_analysis>=5.2.1
   - propka==3.5.1
   - modeller>=10.8
   - mdanalysis
   - biopython
   - pip:
-    - .                          # install biobb_md_workflows itself
+    - biobb_md_workflows @ git+https://github.com/NBDsoftware/biobb_md_workflows
+    - biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs
+    - biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis
