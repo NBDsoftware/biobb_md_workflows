@@ -41,7 +41,7 @@ Input modes are resolved at runtime and can be combined if there are different l
 
 - `--input_pdb` — when no custom parameter set is available, the ligand is protonated with (`--protonation_tool`), minimized (unless `--skip_min`), and parameterized with GAFF via antechamber and acpype.
 
-| Flag | Default | Description |
+| Flag&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Default | Description |
 |------|---------|-------------|
 | `--input_pdb` | *required* | Input PDB file containing the ligands to parameterize. |
 | `--ligands` | all ligands | Ligand names (from the PDB) to parameterize. |
@@ -51,7 +51,7 @@ Input modes are resolved at runtime and can be combined if there are different l
 
 ### Parameters
 
-| Flag | Default | Description |
+| Flag&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Default | Description |
 |------|---------|-------------|
 | `--format` | `gromacs` | Output topology format: `gromacs` or `amber`. |
 | `--charges` | guessed | Per-ligand charges as `name:charge` (e.g. `JZ4:-2 FLP:1`). GAFF/acpype path only; by default acpype guesses from the protonation state. |

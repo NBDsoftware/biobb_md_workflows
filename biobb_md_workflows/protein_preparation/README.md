@@ -1,6 +1,6 @@
 # Protein preparation
 
-Fix PDB defects, choose protonation states for titratable residues, and prepare a protein structure for MD simulation.
+Fix PDB defects, choose protonation states for titratable residues, and prepare a protein structure to run MD simulations.
 
 ## Description
 
@@ -9,18 +9,18 @@ Starting from a raw PDB, the workflow:
 1. **Extracts** the requested chains from the input structure.
 2. **Fixes PDB defects:**
    - **Alternative locations** — keep the highest-occupancy alternative location.
-   - **Mutations** — apply the mutations given in `--mutation_list` (e.g. `A:Arg220Ala`).
-   - **Sequence (FASTA)** — obtain the canonical sequence for backbone modeling (through the `--pdb_code` or `SEQRES` records).
+   - **Mutations** — apply the mutations given in `--mutation_list`.
+   - **Sequence (FASTA)** — obtain the canonical sequence for backbone modeling through the `--pdb_code` or `SEQRES` records.
    - **Missing backbone atoms** — model missing atoms with `biobb_structure_checking` + Modeller for missing loops.
    - **Missing side-chain atoms** — model missing atoms with `biobb_structure_checking`. 
-   - **Amide flips** — relieve clashing ASP/GLU amide groups.
+   - **Amide flips** — relieve clashing ASP/GLU amide groups due to a wrong fit of the electronic density.
    - **Chirality** — fix stereochemical errors in side chains.
    - **Disulfide bonds** — mark CYS→CYX/CYS2 with a distance criterion.
-3. **Assigns protonation states:** assign protonation states to protein residues using propka heurisitc method and a pH (unless `--keep_hs` is selected)
+3. **Assigns protonation states:** assign protonation states to protein residues using propka heurisitc method and a pH, unless `--keep_hs` is selected.
    - Removes existing hydrogens
    - Estimates pKa of titratable residues with `propka`
    - Optimizes histidine protonation state with AmberTools `reduce`
-   - Renames residues according to their protonation state and `--output_format` (`amber` or `gromacs`)
+   - Renames residues according to their protonation state and `--output_format`
    - Specific histidine protonation states can be provided through `--his`.
 
 ## Usage
@@ -30,16 +30,16 @@ conda activate biobb_md
 protein_preparation --input_pdb data/1r9o.pdb --ph 7 --cap_ter --output_format gromacs --output output
 ```
 
-The `config.yml` is auto-generated from the CLI arguments into `--output`. `--restart` resumes from the last completed step when re-run against the same output folder. Run `protein_preparation --help` for the full option list.
+Run `protein_preparation --help` for the full option list.
 
 ## Options
 
-| Flag | Default | Description |
+| Flag&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Default | Description |
 |------|---------|-------------|
 | `--input_pdb` | *required* | Input PDB file. |
 | `--pdb_code` | `None` | PDB code used to fetch the canonical FASTA sequence. If omitted, the PDB HEADER is used. |
 | `--pdb_chains` | all chains | Chains to extract and fix (e.g. `A B C`). |
-| `--mutation_list` | `None` | Mutations to introduce (e.g. `A:Arg220Ala B:Ser221Gly`). |
+| `--mutation_list` | `None` | Mutations to introduce in the  `Chain:WtResnumMut` format (e.g. `A:Arg220Ala B:Ser221Gly`). |
 | `--skip_bc_fix` | `False` | Skip modeling of missing backbone atoms. |
 | `--modeller_key` | `None` | Modeller license key ([register here](https://salilab.org/modeller/registration.html)); required for loop modeling. Only for academic use. |
 | `--cap_ter` | `False` | Cap termini with ACE/NME residues. |
@@ -57,14 +57,14 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 
 ### Structure fixing
 
-Fix only the chains you intend to simulate: select them with `--pdb_chains` (e.g. `--pdb_chains A B`);
+Fix only the chains you intend to simulate: select them with `--pdb_chains`;
 everything else — extra copies, crystallographic partners, waters, ligands — is discarded at extraction.
 Fixing runs *before* protonation, a complete structure makes the downstream pKa estimate more meaningful.
 
 - **Missing atoms vs loops.** Missing side-chain and backbone *atoms* are modelled without a Modeller
   license; modelling missing *loops* (gaps in the chain) needs a `--modeller_key`. The
   key is **academic-use only**. Skip modelling entirely with `--skip_bc_fix` / `--skip_sc_fix`.
-- **Mutations (`--mutation_list`).** Space-separated `Chain:WtResnumMut` with three-letter residue names,
+- **Mutations (`--mutation_list`).** Space-separated mutations,
   e.g. `A:Arg220Ala B:Ser221Gly`.
 - **Capping termini (`--cap_ter`).** Add ACE/NME caps when the input is a fragment or truncated construct,
   so the exposed backbone ends are not treated as charged N-/C-termini. Skip it when the termini are the
@@ -125,7 +125,7 @@ Written into `--output`, organized by steps:
 
 - **Approximate protonation.** propka is an empirical, single-structure pKa predictor: no conformational
   sampling, typical errors below ~1 pKa unit but larger for buried, strongly-coupled, and histidine
-  residues.Verify critical residues manually (`--his` for histidines).
+  residues.Verify critical residues manually (see `--his` for histidines).
 - **Loop modelling requires Modeller.** Modeller is **academic-use only** and needs a license key
   (see [Installation](https://nbdsoftware.github.io/biobb_md_workflows/installation.html)); without it, missing loops are left unmodelled.
 - **Standard protein residues only.** Waters, ions, ligands, cofactors, and modified/non-standard
