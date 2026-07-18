@@ -85,10 +85,6 @@ their residue indices with `--keep_residues`.
 
 ## Output
 
-Checklist:
-
-Files:
-
 Written into `--output`:
 
 - The post-processed trajectory (`--output_traj`, default `trajectory.xtc`) and structure (`--output_str`, default `structure.pdb`).
