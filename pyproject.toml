@@ -15,6 +15,7 @@ dependencies = [
     "propka>=3.5.1",
     "mdanalysis",
     "biopython",
+    "pyyaml",
     # NBDSoftware forks — required by md_gromacs, traj_postprocessing.
     "biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs",
     "biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis",

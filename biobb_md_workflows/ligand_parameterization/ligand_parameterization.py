@@ -2,6 +2,7 @@
 import os
 import time
 import shutil
+import yaml
 import argparse
 from pathlib import Path
 from Bio.PDB import PDBParser
@@ -217,29 +218,64 @@ def gmx_top2itp(top_path: str, itp_path: str):
     with open(itp_path, 'w') as f:
         f.writelines(new_lines)
         
-def copy_out_files(file_paths: List[str], ligand_name: str, output_folder: str):
+def copy_out_files(file_paths: List[str], ligand_name: str, output_folder: str) -> List[str]:
     '''
     Copy coordinate and topology files to the final output folder changing the file names to the ligand name.
     If the file is a GROMACS topology (.top) file, it is converted to an .itp file.
-    
+
     Inputs
     ------
-    
+
         file_paths   : List of file paths to copy.
         ligand_name  : Name of the ligand.
         output_folder: Path to the output folder.
+
+    Returns
+    -------
+        List of the final (copied) file paths, in the same order as file_paths.
     '''
-    
+
+    new_paths = []
     for path in file_paths:
-    
+
         file_extension = Path(path).suffix
-        
+
         if file_extension == '.top':
             new_file_path = os.path.join(output_folder, f"{ligand_name}.itp")
             gmx_top2itp(path, new_file_path)
         else:
             new_file_path = os.path.join(output_folder, f"{ligand_name}{file_extension}")
             shutil.copyfile(path, new_file_path)
+
+        new_paths.append(new_file_path)
+
+    return new_paths
+
+
+# Extension -> manifest category for the per-ligand output files copied by copy_out_files()
+_LIGAND_OUTPUT_CATEGORIES = {
+    '.itp': 'topology',
+    '.frcmod': 'topology',
+    '.lib': 'topology',
+    '.prep': 'topology',
+    '.gro': 'coordinates',
+    '.inpcrd': 'coordinates',
+}
+
+
+def build_ligand_manifest_entry(format: str, copied_paths: List[str], output_path: str) -> Dict:
+    '''
+    Build this ligand's manifest.yaml entry from the files copy_out_files() produced, grouping
+    them under "topology"/"coordinates" and keyed by file extension.
+    '''
+    entry: Dict = {'format': format}
+    for path in copied_paths:
+        extension = Path(path).suffix
+        category = _LIGAND_OUTPUT_CATEGORIES.get(extension)
+        if category is None:
+            continue
+        entry.setdefault(category, {})[extension.lstrip('.')] = os.path.relpath(path, output_path)
+    return entry
 
 # Atomic numbers for the elements expected in bioorganic ligands/cofactors
 ATOMIC_NUMBERS = {
@@ -541,6 +577,7 @@ def ligand_parameterization(
             ligand_charges[ligand_name] = int(ligand_charge)
         
     # Process each ligand
+    ligand_manifest: Dict[str, Dict] = {}
     for ligand_info in selected_ligands:
         
         # Ligand specific properties and paths
@@ -660,8 +697,13 @@ def ligand_parameterization(
                 out_files = [ligand_paths["step4B_acpype_params_ac"]["output_path_frcmod"], ligand_paths["step4B_acpype_params_ac"]["output_path_lib"]]
                 
         # Copy the topology of this ligand to the final output folder
-        copy_out_files(out_files, ligand_name, output_top_path)
-        
+        copied_paths = copy_out_files(out_files, ligand_name, output_top_path)
+        ligand_manifest[ligand_name] = build_ligand_manifest_entry(format, copied_paths, output_path)
+
+    # Write a stable output manifest for external consumers (see manifest.yaml in output_path)
+    with open(os.path.join(output_path, "manifest.yaml"), "w") as manifest_file:
+        yaml.safe_dump({"schema_version": 1, "outputs": {"ligands": ligand_manifest}}, manifest_file, sort_keys=False)
+
     # Print timing information to log file
     elapsed_time = time.time() - start_time
     global_log.info('')

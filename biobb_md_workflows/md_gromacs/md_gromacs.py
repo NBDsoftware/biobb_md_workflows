@@ -9,6 +9,7 @@ import argparse
 import time
 import os
 import zipfile
+import yaml
 
 from Bio.PDB import PDBParser
 
@@ -1510,8 +1511,36 @@ def create_config_file(output_path: str,
         f.write(config_contents(**config_args))
 
     return config_path
-    
-  
+
+
+def _prune_manifest_outputs(node, output_path):
+    '''
+    Recursively drop leaf paths that don't exist on disk (several outputs are behind
+    flags/try-except: --setup_only, --equil_only, ligand-only steps, analysis failures) and
+    drop any group that ends up empty. Surviving leaf paths are converted to paths relative
+    to output_path. `node` is a tree of dicts whose leaves are absolute path strings.
+    '''
+    pruned = {}
+    for key, value in node.items():
+        if isinstance(value, dict):
+            sub = _prune_manifest_outputs(value, output_path)
+            if sub:
+                pruned[key] = sub
+        elif value and os.path.exists(value):
+            pruned[key] = os.path.relpath(value, output_path)
+    return pruned
+
+
+def _write_manifest(output_path: str, stage_reached: str, outputs: Dict[str, Any]):
+    '''
+    Write the stable output manifest (manifest.yaml) for external consumers.
+    '''
+    manifest_outputs = _prune_manifest_outputs(outputs, output_path)
+    manifest_outputs["stage_reached"] = stage_reached
+    with open(os.path.join(output_path, "manifest.yaml"), "w") as manifest_file:
+        yaml.safe_dump({"schema_version": 1, "outputs": manifest_outputs}, manifest_file, sort_keys=False)
+
+
 # Main workflow
 def md_gromacs(
     input_pdb_path: Optional[str] = None, 
@@ -1914,7 +1943,11 @@ def md_gromacs(
 
         if setup_only:
             global_log.info("Set up only: setup_only flag is set to True! Exiting...")
-            return
+            _write_manifest(output_path, "setup", {
+                "structure": {"initial": {"gro": input_gro_path}},
+                "topology": {"top": input_top_path},
+            })
+            return global_paths, global_prop
 
     equil_needed = input_mode in ('input_pdb', 'input_gro_top')
     if equil_needed:
@@ -2008,7 +2041,20 @@ def md_gromacs(
 
         if equil_only:
             global_log.info("Equilibration only: equil_only flag is set to True! Exiting...")
-            return
+            _write_manifest(output_path, "equilibration", {
+                "structure": {
+                    "initial": {"gro": input_gro_path},
+                    "equilibrated": {"gro": equil_paths["step11_mdrun_npt"]["output_gro_path"]},
+                },
+                "topology": {"top": input_top_path},
+                "checkpoint": {"cpt": equil_paths["step11_mdrun_npt"]["output_cpt_path"]},
+                "diagnostics": {
+                    "min_energy": {"xvg": equil_paths["step6_energy_min"]["output_xvg_path"]},
+                    "nvt_temperature": {"xvg": equil_paths["step9_temp_nvt"]["output_xvg_path"]},
+                    "npt_pressure_density": {"xvg": equil_paths["step12_density_npt"]["output_xvg_path"]},
+                },
+            })
+            return global_paths, global_prop
     
     elif input_mode == 'restart_simulation':
         
@@ -2185,6 +2231,7 @@ def md_gromacs(
     # spurious single-residue RMSF spikes on surface residues crossing the box edge).
     fitted_traj_path = analysis_paths["step10_fit_traj"]["output_traj_path"]
     dry_structure_path = analysis_paths["step6_dry_str"]["output_str_path"]
+    ligand_rmsd_paths: Dict[str, str] = {}
     if os.path.exists(fitted_traj_path) and os.path.exists(dry_structure_path):
 
         # STEPS 11-12: build dry references (equilibrated npt, experimental genion) stripped to
@@ -2246,11 +2293,49 @@ def md_gromacs(
                 analysis_prop["step17_rmsd_ligand"]["mask"] = f"(:{ligand_name}&!@H=)"
                 global_log.info(f"step17_rmsd_ligand: Compute ligand RMSD (pose stability) for {ligand_name}")
                 cpptraj_rms(**analysis_paths["step17_rmsd_ligand"], properties=analysis_prop["step17_rmsd_ligand"])
+                ligand_rmsd_paths[ligand_name] = analysis_paths["step17_rmsd_ligand"]["output_cpptraj_path"]
 
     else:
         global_log.error("Basic analysis (RMSD/Rgyr/RMSF) skipped: post-processed trajectory "
                          "or dry structure not found. Check the trajectory post-processing steps (6-10).")
 
+    # Write a stable output manifest for external consumers (see manifest.yaml in output_path)
+    stage_ran_setup_and_equil = input_mode in ('input_pdb', 'input_gro_top')
+    tpr_path = (
+        prod_paths['step1B_convert_tpr']['output_tpr_path']
+        if input_mode == 'restart_simulation'
+        else prod_paths['step1_grompp_md']['output_tpr_path']
+    )
+    manifest_outputs = {
+        "structure": {
+            "final": {"gro": prod_paths["step2_mdrun_prod"]["output_gro_path"]},
+        },
+        "dry_structure": {"pdb": analysis_paths["step6_dry_str"]["output_str_path"]},
+        "topology": {
+            "pdb": analysis_paths["step1_gro2pdb"]["output_str_path"],
+            "tpr": tpr_path,
+        },
+        "trajectory": {"xtc": prod_paths["step2_mdrun_prod"]["output_xtc_path"]},
+        "dry_trajectory": {"xtc": fitted_traj_path},
+        "checkpoint": {"cpt": prod_paths["step2_mdrun_prod"]["output_cpt_path"]},
+        "analysis": {
+            "rmsd_equilibrated": {"xvg": analysis_paths["step13_rmsd_equilibrated"]["output_xvg_path"]},
+            "rmsd_experimental": {"xvg": analysis_paths["step14_rmsd_experimental"]["output_xvg_path"]},
+            "rgyr": {"xvg": analysis_paths["step15_rgyr"]["output_xvg_path"]},
+            "rmsf": {"xmgr": analysis_paths["step16_rmsf"]["output_cpptraj_path"]},
+            **{f"rmsd_ligand_{name}": {"xmgr": path} for name, path in ligand_rmsd_paths.items()},
+        },
+    }
+    if stage_ran_setup_and_equil:
+        manifest_outputs["structure"]["initial"] = {"gro": input_gro_path}
+        manifest_outputs["structure"]["equilibrated"] = {"gro": equil_paths["step11_mdrun_npt"]["output_gro_path"]}
+        manifest_outputs["topology"]["top"] = input_top_path
+        manifest_outputs["diagnostics"] = {
+            "min_energy": {"xvg": equil_paths["step6_energy_min"]["output_xvg_path"]},
+            "nvt_temperature": {"xvg": equil_paths["step9_temp_nvt"]["output_xvg_path"]},
+            "npt_pressure_density": {"xvg": equil_paths["step12_density_npt"]["output_xvg_path"]},
+        }
+    _write_manifest(output_path, "production", manifest_outputs)
 
     # Print timing information to log file
     elapsed_time = time.time() - start_time

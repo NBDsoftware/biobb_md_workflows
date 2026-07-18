@@ -8,6 +8,7 @@ import argparse
 import shutil
 import time
 import os
+import yaml
 
 from Bio.SeqIO.PdbIO import PdbSeqresIterator
 from Bio.PDB import PDBParser, PDBIO
@@ -1398,7 +1399,22 @@ def protein_preparation(
     # Copy the final PDB file to the output path
     final_pdb_path = os.path.join(output_path, f"{Path(input_pdb_path).stem}.pdb")
     shutil.copy(last_pdb_path, final_pdb_path)
-    
+
+    # Write a stable output manifest for external consumers (see manifest.yaml in output_path)
+    manifest_outputs = {
+        "final_structure": {
+            "format": output_format,
+            "pdb": os.path.relpath(final_pdb_path, output_path),
+        },
+    }
+    mapping_json_path = global_paths["step8_renumberstructure"]["output_mapping_json_path"]
+    if os.path.exists(mapping_json_path):
+        manifest_outputs["renumbering_map"] = {
+            "json": os.path.relpath(mapping_json_path, output_path),
+        }
+    with open(os.path.join(output_path, "manifest.yaml"), "w") as manifest_file:
+        yaml.safe_dump({"schema_version": 1, "outputs": manifest_outputs}, manifest_file, sort_keys=False)
+
     # Print timing information to log file
     elapsed_time = time.time() - start_time
     global_log.info('')
