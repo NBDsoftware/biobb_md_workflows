@@ -97,7 +97,7 @@ limit wastes the allocation.
 - **GPU (`--use_gpu`).** Offloads the non-bonded and PME work to the GPU (`-nb gpu -pme gpu`); minimization always runs on CPU. For a single GPU one MPI rank is usually fastest (`--num_threads_mpi 1`) but you can add OpenMP threads; with N GPUs the number of MPI ranks must equal N. 
 - **Multi-node.** Requires a GROMACS built with external MPI: set `--gmx_bin gmx_mpi` and launch it through `--mpi_bin` (`srun`/`mpirun`). One rank per core scales well down to ~200 particles/core; beyond that, add OpenMP threads per rank. Match `--num_threads_mpi` and `--num_threads_omp` to your SLURM `--ntasks` and `--cpus-per-task` respectively.
 
-### Simulation parameters
+### Simulation protocol details
 
 The production protocol uses the leap-frog algorithm for integrating Newton’s equations of 
 motion. The neighbor search is done with the Verlet cut-off scheme. Electrostatics are computed 

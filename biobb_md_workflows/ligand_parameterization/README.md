@@ -64,7 +64,7 @@ Input modes are resolved at runtime and can be combined if there are different l
 
 ## Recommendations
 
-### Parameters
+### Choosing a parameterization path
 
 Prefer a curated custom AMBER parameter set when one exists: pass it with `--ligand_parameters`
 (`<LIG>.frcmod` + `<LIG>.prep`, named after the ligand). These are literature-validated and keep the
