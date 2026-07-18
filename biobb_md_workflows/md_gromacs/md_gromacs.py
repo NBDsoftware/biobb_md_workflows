@@ -2236,10 +2236,11 @@ def md_gromacs(
             if missing:
                 global_log.warning(f"step17_rmsd_ligand: ligand id(s) {missing} not found as residues "
                                    f"in the dry structure (the id must match the residue name); skipping those.")
+            ligand_rmsd_dir = os.path.dirname(analysis_paths["step17_rmsd_ligand"]["output_cpptraj_path"])
             for ligand_name in ligand_resnames:
                 analysis_paths["step17_rmsd_ligand"]["input_traj_path"] = fitted_traj_path
                 analysis_paths["step17_rmsd_ligand"]["input_top_path"] = dry_structure_path
-                analysis_paths["step17_rmsd_ligand"]["output_cpptraj_path"] = f"md_rmsd_ligand_{ligand_name}.xmgr"
+                analysis_paths["step17_rmsd_ligand"]["output_cpptraj_path"] = os.path.join(ligand_rmsd_dir, f"md_rmsd_ligand_{ligand_name}.xmgr")
                 # Parens required so the cpptraj strip becomes "!(:LIG&!@H=)" (keep ligand heavy atoms);
                 # without them biobb would strip "(!:LIG)&(!@H=)", keeping the ligand plus all hydrogens.
                 analysis_prop["step17_rmsd_ligand"]["mask"] = f"(:{ligand_name}&!@H=)"
