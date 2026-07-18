@@ -6,9 +6,18 @@ This repo covers the protein preparation, ligand parameterization, MD with GROMA
 
 ## Tutorial
 
-New here? The [Colab tutorial](notebooks/biobb_md_workflows_colab_tutorial.ipynb) runs a full protein–ligand MD (PDB `3HTB` + ligand `JZ4`) end to end using the workflow commands — no local install required:
+New here? The [tutorial notebook](notebooks/notebook_tutorial.ipynb) runs a full protein–ligand MD (PDB `3HTB` + ligand `JZ4`) end to end using the workflow commands. Run it **on Google Colab** (no local install) or **on a local Jupyter**:
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/NBDsoftware/biobb_md_workflows/blob/master/notebooks/biobb_md_workflows_colab_tutorial.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/NBDsoftware/biobb_md_workflows/blob/master/notebooks/notebook_tutorial.ipynb)
+
+- **Colab** — click the badge; the first cell builds the environment for you.
+- **Local** — create the env and launch Jupyter, then skip the Colab setup cell:
+
+  ```bash
+  conda env create -f notebooks/local_environment.yml
+  conda activate biobb_md_tutorial
+  jupyter notebook notebooks/notebook_tutorial.ipynb
+  ```
 
 ## Documentation
 

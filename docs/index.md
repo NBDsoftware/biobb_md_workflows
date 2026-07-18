@@ -26,6 +26,9 @@ repositories: virtual screening in
 :class: only-dark
 ```
 
+**New here?** Start with the [Tutorial](tutorial.md) — a guided, end-to-end protein–ligand MD
+run you can do on Google Colab (no install) or on a local Jupyter.
+
 ## Workflows
 
 | Command | Purpose |
@@ -39,6 +42,7 @@ repositories: virtual screening in
 :maxdepth: 2
 :hidden:
 
+tutorial
 installation
 workflows/protein_preparation
 workflows/ligand_parameterization
