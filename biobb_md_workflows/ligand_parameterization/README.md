@@ -20,7 +20,7 @@ residue if omitted), the workflow:
    GROMACS `.top` files are stripped of their `[ defaults ]`/`[ molecules ]` sections and written as
    `.itp`, so they can be `#include`d into a master topology.
 
-Note: for **GROMACS**, the coordinates `.gro` and topology `.itp` must agree, so the workflow must be re-run for every new PDB (the coordinates change for every system even if the ligand is the same). For **AMBER**, `tleap` can reconstruct missing atoms from the `.prep`/`.lib` files, so `.frcmod` + `.prep`/`.lib` sets can be reused across PDBs without re-running.
+Note: for the **GROMACS** format, the produced coordinates `.gro` must agree with the PDB file being simulated, so the workflow must be re-run for every new PDB (the coordinates change for every system even if the ligand is the same). For **AMBER**, `tleap` can parameterize from the `.prep`/`.lib` files independently of the ligand coordinates, so `.frcmod` + `.prep`/`.lib` sets can be reused across PDBs without re-running the ligand parameterization workflow.
 
 ## Usage
 
@@ -41,7 +41,7 @@ Input modes are resolved at runtime and can be combined if there are different l
 
 - `--input_pdb` — when no custom parameter set is available, the ligand is protonated with (`--protonation_tool`), minimized (unless `--skip_min`), and parameterized with GAFF via antechamber and acpype.
 
-| Flag | Default | Description |
+| Flag&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Default | Description |
 |------|---------|-------------|
 | `--input_pdb` | *required* | Input PDB file containing the ligands to parameterize. |
 | `--ligands` | all ligands | Ligand names (from the PDB) to parameterize. |
@@ -51,7 +51,7 @@ Input modes are resolved at runtime and can be combined if there are different l
 
 ### Parameters
 
-| Flag | Default | Description |
+| Flag&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Default | Description |
 |------|---------|-------------|
 | `--format` | `gromacs` | Output topology format: `gromacs` or `amber`. |
 | `--charges` | guessed | Per-ligand charges as `name:charge` (e.g. `JZ4:-2 FLP:1`). GAFF/acpype path only; by default acpype guesses from the protonation state. |

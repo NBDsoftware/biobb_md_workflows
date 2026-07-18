@@ -1,4 +1,6 @@
-name: biobb_md
+# Conda environment for running the biobb_md_workflows tutorial ON GOOGLE COLAB.
+# For running the notebook on a LOCAL Jupyter, use local_environment.yml instead.
+name: biobb_md_tutorial
 channels:
   - conda-forge
   - bioconda
@@ -15,9 +17,18 @@ dependencies:
   - biobb_io>=5.2.3
   - biobb_pdb_tools>=5.2.1
   - propka==3.5.1
-  - modeller>=10.8
+  - modeller>=10.8      # no license key needed for 3HTB (no backbone gaps to model)
   - mdanalysis
   - biopython
+  # --- Tools that are HPC modules on the cluster, needed locally on Colab ---
+  - gromacs
+  - ambertools
+  - acpype
+  - openbabel
+  # --- Visualization ---
+  - nglview<=4.0
+  - plotly
+  - numpy
   - pip:
     - biobb_md_workflows @ git+https://github.com/NBDsoftware/biobb_md_workflows
     - biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs

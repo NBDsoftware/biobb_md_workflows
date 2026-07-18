@@ -2,6 +2,7 @@
 import os
 import time
 import shutil
+import yaml
 import argparse
 from pathlib import Path
 from Bio.PDB import PDBParser
@@ -217,23 +218,28 @@ def gmx_top2itp(top_path: str, itp_path: str):
     with open(itp_path, 'w') as f:
         f.writelines(new_lines)
         
-def copy_out_files(file_paths: List[str], ligand_name: str, output_folder: str):
+def copy_out_files(file_paths: List[str], ligand_name: str, output_folder: str) -> List[str]:
     '''
     Copy coordinate and topology files to the final output folder changing the file names to the ligand name.
     If the file is a GROMACS topology (.top) file, it is converted to an .itp file.
-    
+
     Inputs
     ------
-    
+
         file_paths   : List of file paths to copy.
         ligand_name  : Name of the ligand.
         output_folder: Path to the output folder.
+
+    Returns
+    -------
+        List of the final (copied) file paths, in the same order as file_paths.
     '''
-    
+
+    new_paths = []
     for path in file_paths:
-    
+
         file_extension = Path(path).suffix
-        
+
         if file_extension == '.top':
             new_file_path = os.path.join(output_folder, f"{ligand_name}.itp")
             gmx_top2itp(path, new_file_path)
@@ -241,11 +247,79 @@ def copy_out_files(file_paths: List[str], ligand_name: str, output_folder: str):
             new_file_path = os.path.join(output_folder, f"{ligand_name}{file_extension}")
             shutil.copyfile(path, new_file_path)
 
+        new_paths.append(new_file_path)
+
+    return new_paths
+
+
+# Extension -> manifest category for the per-ligand output files copied by copy_out_files()
+_LIGAND_OUTPUT_CATEGORIES = {
+    '.itp': 'topology',
+    '.frcmod': 'topology',
+    '.lib': 'topology',
+    '.prep': 'topology',
+    '.gro': 'coordinates',
+    '.inpcrd': 'coordinates',
+}
+
+
+def build_ligand_manifest_entry(format: str, copied_paths: List[str], output_path: str) -> Dict:
+    '''
+    Build this ligand's manifest.yaml entry from the files copy_out_files() produced, grouping
+    them under "topology"/"coordinates" and keyed by file extension.
+    '''
+    entry: Dict = {'format': format}
+    for path in copied_paths:
+        extension = Path(path).suffix
+        category = _LIGAND_OUTPUT_CATEGORIES.get(extension)
+        if category is None:
+            continue
+        entry.setdefault(category, {})[extension.lstrip('.')] = os.path.relpath(path, output_path)
+    return entry
+
+# Atomic numbers for the elements expected in bioorganic ligands/cofactors
+ATOMIC_NUMBERS = {
+    'H': 1, 'B': 5, 'C': 6, 'N': 7, 'O': 8, 'F': 9, 'NA': 11, 'MG': 12,
+    'AL': 13, 'SI': 14, 'P': 15, 'S': 16, 'CL': 17, 'K': 19, 'CA': 20,
+    'MN': 25, 'FE': 26, 'CO': 27, 'NI': 28, 'CU': 29, 'ZN': 30, 'SE': 34,
+    'BR': 35, 'MO': 42, 'I': 53,
+}
+
+def count_electrons(pdb_path: str):
+    '''
+    Count the total number of electrons of a neutral molecule in a PDB file (sum of atomic numbers).
+    Returns (total_electrons, unknown_elements) where unknown_elements is the set of element symbols
+    that could not be mapped to an atomic number (making the count unreliable if non-empty).
+
+    NOTE: parses ATOM/HETATM records directly rather than via Bio.PDB, because PDBParser silently
+    collapses atoms sharing the same name (e.g. Open Babel names every hydrogen "H"), which would
+    undercount atoms and give a wrong electron parity.
+    '''
+    total = 0
+    unknown = set()
+    with open(pdb_path) as pdb_file:
+        for line in pdb_file:
+            if not (line.startswith('ATOM') or line.startswith('HETATM')):
+                continue
+            # PDB element symbol lives in columns 77-78; fall back to the atom name (cols 13-16) if blank
+            element = line[76:78].strip().upper()
+            if not element:
+                element = ''.join(c for c in line[12:16] if c.isalpha()).upper()[:2]
+            z = ATOMIC_NUMBERS.get(element)
+            if z is None and len(element) == 2:
+                z = ATOMIC_NUMBERS.get(element[0])   # e.g. atom-name-derived "CA" carbon -> "C"
+            if z is None:
+                unknown.add(element)
+            else:
+                total += z
+    return total, unknown
+
 # YML construction
 def config_contents(
     input_pdb_path: str,
     forcefields: List[str],
-    restart: bool = False
+    restart: bool = False,
+    debug: bool = False
     ) -> str:
     """
     Returns the contents of the YAML configuration file as a string.
@@ -264,7 +338,7 @@ global_properties:
   working_dir_path: output                         # Workflow default output directory
   can_write_console_log: false                     # Verbose writing of log information
   restart: {to_yaml(restart)}                      # Skip steps already performed
-  remove_tmp: true
+  remove_tmp: {to_yaml(not debug)}                 # Remove temporal files
 
 # Step 1: extract heteroatoms from input PDB file
 step1_ligand_extraction:
@@ -386,9 +460,10 @@ def ligand_parameterization(
             format: Literal['gromacs', 'amber'] = 'gromacs', 
             ligand_parameters: Optional[str] = None,
             protonation_tool: Literal['ambertools', 'obabel', 'none'] = 'ambertools', 
-            skip_min: bool = False, 
+            skip_min: bool = False,
             restart: bool = False,
-            output_top_path: Optional[str] = None, 
+            debug: bool = False,
+            output_top_path: Optional[str] = None,
             output_path: Optional[str] = None
     ):
     '''
@@ -419,9 +494,11 @@ def ligand_parameterization(
             (.prep and .frcmod files with the ligand name).
         protonation_tool:  
             protonation tool to use. Options: ambertools, obabel. Default: ambertools.
-        skip_min:  
+        skip_min:
             skip the minimization step. Default: False.
-        output_top_path:  
+        debug:
+            whether to keep temporary files. Default: False
+        output_top_path:
             output path for the folder with topologies and coordinate files.
         output_path:  
             output path. Default: 'output'
@@ -449,7 +526,8 @@ def ligand_parameterization(
     config_args = {
         'input_pdb_path': input_pdb_path,
         'forcefields': forcefields,
-        'restart': restart
+        'restart': restart,
+        'debug': debug
     }
     configuration_path = create_config_file(output_path, **config_args)
 
@@ -499,6 +577,7 @@ def ligand_parameterization(
             ligand_charges[ligand_name] = int(ligand_charge)
         
     # Process each ligand
+    ligand_manifest: Dict[str, Dict] = {}
     for ligand_info in selected_ligands:
         
         # Ligand specific properties and paths
@@ -585,7 +664,24 @@ def ligand_parameterization(
             else:
                 ligand_prop["step4B_acpype_params_gmx"]["charge"] = None
                 ligand_prop["step4B_acpype_params_ac"]["charge"] = None
-                
+
+            # Electron-parity check: acpype runs SQM with multiplicity 1 (singlet), which needs an even
+            # electron count. electrons = sum(atomic numbers) - net charge; odd => SQM fails with a cryptic
+            # "odd number of electrons" error. Warn early with an actionable message. Charge defaults to 0
+            # when not given (acpype then guesses, defaulting to neutral).
+            acpype_input_path = ligand_paths["step4B_acpype_params_gmx"]["input_path"]
+            assumed_charge = ligand_charges.get(ligand_name, 0)
+            neutral_electrons, unknown_elements = count_electrons(acpype_input_path)
+            if unknown_elements:
+                global_log.warning(f"{ligand_name}: could not map elements {sorted(unknown_elements)} to atomic numbers; skipping electron-parity check")
+            elif (neutral_electrons - assumed_charge) % 2 != 0:
+                global_log.warning(
+                    f"{ligand_name}: odd electron count ({neutral_electrons - assumed_charge}) for net charge {assumed_charge}. "
+                    f"acpype/SQM uses multiplicity 1 (singlet), which requires an even count and will fail. "
+                    f"Likely a protonation problem (missing/extra H) or a wrong charge. "
+                    f"Check protonation (e.g. --protonation_tool obabel) or the --charges value for {ligand_name}."
+                )
+
             # Create gromacs topology
             if format == 'gromacs':
                 ligand_prop["step4B_acpype_params_gmx"]["basename"] = ligand_name
@@ -601,8 +697,13 @@ def ligand_parameterization(
                 out_files = [ligand_paths["step4B_acpype_params_ac"]["output_path_frcmod"], ligand_paths["step4B_acpype_params_ac"]["output_path_lib"]]
                 
         # Copy the topology of this ligand to the final output folder
-        copy_out_files(out_files, ligand_name, output_top_path)
-        
+        copied_paths = copy_out_files(out_files, ligand_name, output_top_path)
+        ligand_manifest[ligand_name] = build_ligand_manifest_entry(format, copied_paths, output_path)
+
+    # Write a stable output manifest for external consumers (see manifest.yaml in output_path)
+    with open(os.path.join(output_path, "manifest.yaml"), "w") as manifest_file:
+        yaml.safe_dump({"schema_version": 1, "outputs": {"ligands": ligand_manifest}}, manifest_file, sort_keys=False)
+
     # Print timing information to log file
     elapsed_time = time.time() - start_time
     global_log.info('')
@@ -662,7 +763,11 @@ def main():
     parser.add_argument('--restart', action='store_true',
                         help="Restart the workflow from the last completed step. Default: False",
                         required=False, default=False)
-    
+
+    parser.add_argument('--debug', action='store_true',
+                        help="Keep temporary files. Default: False",
+                        required=False, default=False)
+
     parser.add_argument('--output_top_path', dest='output_top_path',
                         help='Output path for the folder with ligand topologies (Amber: .frcmod and .prep/.lib files, Gromacs: .gro and .itp files).',
                         required=False, default=None)
@@ -683,9 +788,10 @@ def main():
         format = args.format, 
         ligand_parameters = args.ligand_parameters, 
         protonation_tool = args.protonation_tool,
-        skip_min = args.skip_min, 
-        restart = args.restart, 
-        output_top_path = args.output_top_path, 
+        skip_min = args.skip_min,
+        restart = args.restart,
+        debug = args.debug,
+        output_top_path = args.output_top_path,
         output_path=args.output_path
     )
 

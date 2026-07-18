@@ -26,7 +26,7 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 
 ### Inputs
 
-| Flag | Default | Description |
+| Flag&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Default | Description |
 |------|---------|-------------|
 | `--input_traj` | *required* | Input trajectory (`.xtc`). |
 | `--input_top` | *required* | Binary run input file (`.tpr`). |
@@ -34,7 +34,7 @@ The `config.yml` is auto-generated from the CLI arguments into `--output`. `--re
 
 ### Parameters
 
-| Flag | Default | Description |
+| Flag&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Default | Description |
 |------|---------|-------------|
 | `--gmx_bin` | `gmx` | GROMACS binary path. |
 | `--fast` | `False` | Skip making solute whole, removing jumps, and clustering. |

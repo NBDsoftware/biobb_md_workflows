@@ -6,6 +6,7 @@ import numpy as np
 import argparse
 import time
 import os
+import yaml
 
 from Bio.PDB import PDBParser
 
@@ -683,6 +684,15 @@ def traj_postprocessing(
     final_str_path = paths['step4_dry_str']['output_str_path']
     os.rename(final_traj_path, output_traj_path)
     os.rename(final_str_path, output_str_path)
+
+    # Write a stable output manifest for external consumers (see manifest.yaml in output_path)
+    manifest_outputs = {}
+    if os.path.exists(output_str_path):
+        manifest_outputs["structure"] = {"pdb": os.path.relpath(output_str_path, output_path)}
+    if os.path.exists(output_traj_path):
+        manifest_outputs["trajectory"] = {"xtc": os.path.relpath(output_traj_path, output_path)}
+    with open(os.path.join(output_path, "manifest.yaml"), "w") as manifest_file:
+        yaml.safe_dump({"schema_version": 1, "outputs": manifest_outputs}, manifest_file, sort_keys=False)
 
     elapsed = time.time() - start_time
     global_log.info('')

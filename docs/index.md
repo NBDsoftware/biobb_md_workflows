@@ -44,6 +44,7 @@ workflows/protein_preparation
 workflows/ligand_parameterization
 workflows/md_gromacs
 workflows/traj_postprocessing
+fair4rs_assessment
 ```
 
 ## Licensing

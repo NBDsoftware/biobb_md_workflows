@@ -34,7 +34,7 @@ Input modes are mutually exclusive and resolved at runtime:
 
 Ligand topologies produced by `ligand_parameterization` can be added with `--ligands_folder`.
 
-| Flag | Default | Description |
+| Flag&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Default | Description |
 |------|---------|-------------|
 | `--input_pdb` | `None` | Prepared PDB; protonation is taken from the residue names. |
 | `--input_gro` | `None` | Input structure (`.gro`); use with `--input_top`. |
@@ -49,7 +49,7 @@ Ligand topologies produced by `ligand_parameterization` can be added with `--lig
 
 Execution can be single-node (`gmx` with thread-MPI/OpenMP) or multi-node (`gmx_mpi` with `--mpi_bin`/`--mpi_np`, e.g. `srun`/`mpirun`). GPU offload of the non-bonded and PME work is enabled with `--use_gpu` (`-nb gpu -pme gpu`).
 
-| Flag | Default | Description |
+| Flag&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Default | Description |
 |------|---------|-------------|
 | `--gmx_bin` | `gmx` | GROMACS binary (`gmx` single-node, `gmx_mpi` multi-node). |
 | `--mpi_bin` | `null` | MPI binary path (e.g. `srun`, `mpirun`). |
@@ -61,7 +61,7 @@ Execution can be single-node (`gmx` with thread-MPI/OpenMP) or multi-node (`gmx_
 
 ### Simulation parameters
 
-| Flag | Default | Description |
+| Flag&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Default | Description |
 |------|---------|-------------|
 | `--forcefield` | `amber99sb-ildn` | pdb2gmx force field. Available force fields depend on the GROMACS version |
 | `--ions_concentration` | `0.15` | Salt concentration (mol/L). |
