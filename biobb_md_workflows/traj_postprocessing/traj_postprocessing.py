@@ -14,6 +14,7 @@ from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 
 from biobb_md_workflows.common import to_yaml
+from biobb_md_workflows import __version__
 
 from biobb_gromacs.gromacs.make_ndx import make_ndx
 from biobb_gromacs.gromacs.editconf import editconf
@@ -497,6 +498,7 @@ def traj_postprocessing(
 
     # Initialize a global log file
     global_log, _ = fu.get_logs(path=output_path, light_format=True)
+    global_log.info(f"biobb_md_workflows version {__version__}")
 
     ###########################################
     # Build GROMACS selection strings for ndx #

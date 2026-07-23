@@ -13,12 +13,14 @@ dependencies = [
     "biobb_io>=5.2.3",
     "biobb_pdb_tools>=5.2.1",
     "propka>=3.5.1",
-    "mdanalysis",
-    "biopython",
+    "mdanalysis==2.10.0",
+    "biopython==1.87",
     "pyyaml",
     # NBDSoftware forks — required by md_gromacs, traj_postprocessing.
-    "biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs",
-    "biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis",
+    # Pinned to fork-namespaced tags (nbd-*) so installs are reproducible and
+    # don't collide with upstream's future tags. Bump these when re-tagging.
+    "biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs@nbd-5.2.1",
+    "biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis@nbd-5.2.1",
     # Required by md_gromacs, ligand_parameterization, protein_preparation.
     "biobb_amber>=5.2.1",
     "biobb_chemistry>=5.2.1",

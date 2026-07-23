@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "biobb_md_workflows"
+abstract: >-
+  BioBB Workflows for MD simulations with GROMACS: CLI pipelines
+  (protein preparation, ligand parameterization, GROMACS MD, and trajectory
+  post-processing) built on top of BioExcel Building Blocks (BioBB).
+type: software
+version: "0.0.5"
+license: CC-BY-NC-SA-4.0
+repository-code: "https://github.com/NBDsoftware/biobb_md_workflows"
+authors:
+  - family-names: "Navarro"
+    given-names: "Pablo"
+    affiliation: "Nostrum Biodiscovery"
+    orcid: "https://orcid.org/0000-0002-4954-4098"

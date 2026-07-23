@@ -18,6 +18,7 @@ from biobb_common.configuration import settings
 from biobb_common.tools import file_utils as fu
 
 from biobb_md_workflows.common import to_yaml
+from biobb_md_workflows import __version__
 from biobb_io.api.canonical_fasta import canonical_fasta
 from biobb_model.model.fix_backbone import fix_backbone
 from biobb_model.model.fix_side_chain import fix_side_chain
@@ -1175,6 +1176,7 @@ def protein_preparation(
     
     # Initialize a global log file
     global_log, _ = fu.get_logs(path=output_path, light_format=True)
+    global_log.info(f"biobb_md_workflows version {__version__}")
     
     # Create the configuration file
     config_args = {

@@ -24,7 +24,7 @@ conda env create -f environment.yml   # creates the `biobb_md` env, installs thi
 conda activate biobb_md
 ```
 
-`pyproject.toml` requires exactly Python 3.11. Two dependencies (`biobb_gromacs`, `biobb_analysis`) are installed from NBDsoftware forks on GitHub, not PyPI — required by `md_gromacs` and `traj_postprocessing`.
+`pyproject.toml` requires exactly Python 3.12. Two dependencies (`biobb_gromacs`, `biobb_analysis`) are installed from NBDsoftware forks on GitHub, not PyPI — required by `md_gromacs` and `traj_postprocessing`.
 
 After editing `pyproject.toml` entry points or dependencies, reinstall with `pip install .`.
 

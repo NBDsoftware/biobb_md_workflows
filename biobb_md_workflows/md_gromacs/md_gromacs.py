@@ -38,6 +38,7 @@ from biobb_analysis.ambertools.cpptraj_rms import cpptraj_rms
 from biobb_structure_utils.utils.cat_pdb import cat_pdb
 
 from biobb_md_workflows.common import to_yaml
+from biobb_md_workflows import __version__
 
 # Constants
 # Titratable residues in GROMACS, HIS are already set with their resnames
@@ -1677,6 +1678,7 @@ def md_gromacs(
 
     # Initialize a global log file
     global_log, _ = fu.get_logs(path=output_path, light_format=True)
+    global_log.info(f"biobb_md_workflows version {__version__}")
     
     # Check input files
     input_mode = check_inputs(
