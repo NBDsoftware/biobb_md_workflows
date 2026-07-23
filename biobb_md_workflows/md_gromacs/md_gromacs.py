@@ -2228,45 +2228,59 @@ def md_gromacs(
     except Exception:
         global_log.exception("steps 7 to 10 failed with unexpected exception")
 
-    # STEPS 11-16: basic analysis on the post-processed (dry, imaged, centered, fitted)
-    # trajectory. Running these on the raw trajectory produced PBC/imaging artifacts (e.g.
-    # spurious single-residue RMSF spikes on surface residues crossing the box edge).
+    # STEPS 11-16: basic analysis on the post-processed (dry, imaged, centered, fitted) trajectory. 
     fitted_traj_path = analysis_paths["step10_fit_traj"]["output_traj_path"]
     dry_structure_path = analysis_paths["step6_dry_str"]["output_str_path"]
     ligand_rmsd_paths: Dict[str, str] = {}
     if os.path.exists(fitted_traj_path) and os.path.exists(dry_structure_path):
 
-        # STEPS 11-12: build dry references (equilibrated npt, experimental genion) stripped to
-        # the output group so their atom set matches the dry fitted trajectory (needed by gmx rms)
-        analysis_paths["step11_dry_npt_ref"]["input_structure_path"] = equil_paths["step11_mdrun_npt"]["output_gro_path"]
-        analysis_paths["step11_dry_npt_ref"]["input_top_path"] = input_tpr_path
-        analysis_paths["step11_dry_npt_ref"]["input_index_path"] = input_ndx_path
-        analysis_paths["step12_dry_genion_ref"]["input_structure_path"] = setup_paths["step9_genion"]["output_gro_path"]
-        analysis_paths["step12_dry_genion_ref"]["input_top_path"] = input_tpr_path
-        analysis_paths["step12_dry_genion_ref"]["input_index_path"] = input_ndx_path
+        # STEPS 11 & 13: RMSD vs the equilibrated structure. Only possible when the workflow
+        # equilibrated the system (input_pdb / input_gro_top) - restart_simulation has no npt.gro.
+        # The npt.gro is stripped to the output group so its atom set matches the dry fitted traj.
+        equilibrated_ref_gro = (
+            equil_paths["step11_mdrun_npt"]["output_gro_path"] if equil_needed else None
+        )
+        if equilibrated_ref_gro and os.path.exists(equilibrated_ref_gro):
+            analysis_paths["step11_dry_npt_ref"]["input_structure_path"] = equilibrated_ref_gro
+            analysis_paths["step11_dry_npt_ref"]["input_top_path"] = input_tpr_path
+            analysis_paths["step11_dry_npt_ref"]["input_index_path"] = input_ndx_path
+            global_log.info("step11_dry_npt_ref: Build dry equilibrated reference for RMSD")
+            gmx_trjconv_str(**analysis_paths["step11_dry_npt_ref"], properties=analysis_prop["step11_dry_npt_ref"])
 
-        global_log.info("step11_dry_npt_ref: Build dry equilibrated reference for RMSD")
-        gmx_trjconv_str(**analysis_paths["step11_dry_npt_ref"], properties=analysis_prop["step11_dry_npt_ref"])
-        global_log.info("step12_dry_genion_ref: Build dry experimental reference for RMSD")
-        gmx_trjconv_str(**analysis_paths["step12_dry_genion_ref"], properties=analysis_prop["step12_dry_genion_ref"])
+            # STEP 13: compute the RMSD with respect to equilibrated structure
+            analysis_paths["step13_rmsd_equilibrated"]["input_traj_path"] = fitted_traj_path
+            analysis_paths["step13_rmsd_equilibrated"]["input_structure_path"] = analysis_paths["step11_dry_npt_ref"]["output_str_path"]
+            global_log.info("step13_rmsd_equilibrated: Compute Root Mean Square deviation against equilibrated structure")
+            gmx_rms(**analysis_paths["step13_rmsd_equilibrated"], properties=analysis_prop["step13_rmsd_equilibrated"])
+        else:
+            global_log.info("step13_rmsd_equilibrated: skipped (no equilibrated reference available for this input mode)")
 
-        # Wire the metrics to the fitted trajectory and the dry references
-        analysis_paths["step13_rmsd_equilibrated"]["input_traj_path"] = fitted_traj_path
-        analysis_paths["step13_rmsd_equilibrated"]["input_structure_path"] = analysis_paths["step11_dry_npt_ref"]["output_str_path"]
-        analysis_paths["step14_rmsd_experimental"]["input_traj_path"] = fitted_traj_path
-        analysis_paths["step14_rmsd_experimental"]["input_structure_path"] = analysis_paths["step12_dry_genion_ref"]["output_str_path"]
+        # STEPS 12 & 14: RMSD vs the experimental/starting structure. `input_gro_path` is the
+        # structure fed into minimization: genion.gro when solvated, or the raw structure when
+        # --skip_solvation. Only defined when the workflow set up the system (input_pdb /
+        # input_gro_top) - restart_simulation has no starting structure. Stripped to output group.
+        experimental_ref_gro = input_gro_path if setup_needed else None
+        if experimental_ref_gro and os.path.exists(experimental_ref_gro):
+            analysis_paths["step12_dry_genion_ref"]["input_structure_path"] = experimental_ref_gro
+            analysis_paths["step12_dry_genion_ref"]["input_top_path"] = input_tpr_path
+            analysis_paths["step12_dry_genion_ref"]["input_index_path"] = input_ndx_path
+            global_log.info("step12_dry_genion_ref: Build dry experimental reference for RMSD")
+            gmx_trjconv_str(**analysis_paths["step12_dry_genion_ref"], properties=analysis_prop["step12_dry_genion_ref"])
+
+            # STEP 14: compute the RMSD with respect to minimized (experimental) structure
+            analysis_paths["step14_rmsd_experimental"]["input_traj_path"] = fitted_traj_path
+            analysis_paths["step14_rmsd_experimental"]["input_structure_path"] = analysis_paths["step12_dry_genion_ref"]["output_str_path"]
+            global_log.info("step14_rmsd_experimental: Compute Root Mean Square deviation against minimized structure (exp)")
+            gmx_rms(**analysis_paths["step14_rmsd_experimental"], properties=analysis_prop["step14_rmsd_experimental"])
+        else:
+            global_log.info("step14_rmsd_experimental: skipped (no experimental reference available for this input mode/flags)")
+
+        # STEPS 15-17: Rgyr, RMSF and per-ligand RMSD use the dry structure (available in all
+        # modes), so they always run once the fitted trajectory and dry structure exist.
         analysis_paths["step15_rgyr"]["input_traj_path"] = fitted_traj_path
         analysis_paths["step15_rgyr"]["input_structure_path"] = dry_structure_path
         analysis_paths["step16_rmsf"]["input_traj_path"] = fitted_traj_path
         analysis_paths["step16_rmsf"]["input_top_path"] = dry_structure_path
-
-        # STEP 13: compute the RMSD with respect to equilibrated structure
-        global_log.info("step13_rmsd_equilibrated: Compute Root Mean Square deviation against equilibrated structure")
-        gmx_rms(**analysis_paths["step13_rmsd_equilibrated"], properties=analysis_prop["step13_rmsd_equilibrated"])
-
-        # STEP 14: compute the RMSD with respect to minimized (experimental) structure
-        global_log.info("step14_rmsd_experimental: Compute Root Mean Square deviation against minimized structure (exp)")
-        gmx_rms(**analysis_paths["step14_rmsd_experimental"], properties=analysis_prop["step14_rmsd_experimental"])
 
         # STEP 15: compute the Radius of gyration
         global_log.info("step15_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
@@ -2290,8 +2304,6 @@ def md_gromacs(
                 analysis_paths["step17_rmsd_ligand"]["input_traj_path"] = fitted_traj_path
                 analysis_paths["step17_rmsd_ligand"]["input_top_path"] = dry_structure_path
                 analysis_paths["step17_rmsd_ligand"]["output_cpptraj_path"] = os.path.join(ligand_rmsd_dir, f"md_rmsd_ligand_{ligand_name}.xmgr")
-                # Parens required so the cpptraj strip becomes "!(:LIG&!@H=)" (keep ligand heavy atoms);
-                # without them biobb would strip "(!:LIG)&(!@H=)", keeping the ligand plus all hydrogens.
                 analysis_prop["step17_rmsd_ligand"]["mask"] = f"(:{ligand_name}&!@H=)"
                 global_log.info(f"step17_rmsd_ligand: Compute ligand RMSD (pose stability) for {ligand_name}")
                 cpptraj_rms(**analysis_paths["step17_rmsd_ligand"], properties=analysis_prop["step17_rmsd_ligand"])
