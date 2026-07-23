@@ -20,7 +20,7 @@ Legend: 🟢 real / settled · 🟡 partial/aspirational · 🔴 missing or unde
 
 | Principle | Reality in the repo | Status |
 |---|---|---|
-| **Reproducibility** | Floor now in place: all forks are pinned (`biobb_gromacs`, `biobb_analysis`) to fork-namespaced tags (`@nbd-5.2.1`); `mdanalysis`, `biopython`, `ambertools`, `acpype`, `openbabel`, `propka` are version-pinned. | 🟡 |
+| **Reproducibility** | Floor now in place: all forks are pinned (`biobb_gromacs`, `biobb_analysis`) to fork-namespaced tags; `mdanalysis`, `biopython`, `ambertools`, `acpype`, `openbabel`, `propka` are version-pinned. | 🟡 |
 | **Provenance** | `config.yml` + absolute input path are written per run; `log.out` and per-step logs exist. Package version is now logged in the `log.out` header. Full CLI command, and input-file checksums are still recorded nowhere (full `run_manifest.json` remains future work). | 🟡 |
 | **Environment portability** | Conda env files exist; deps + forks now pinned. No container yet. | 🟡 |
 | **Modularity** | Genuinely modular at the BioBB-step level. `create_config_file`/config scaffolding is copy-pasted across all four workflows (only `common.to_yaml` is shared). **De-duplication is deferred — delicate** (each workflow's config differs subtly). | 🟡 |
