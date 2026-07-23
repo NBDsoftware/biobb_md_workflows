@@ -6,7 +6,7 @@ abstract: >-
   (protein preparation, ligand parameterization, GROMACS MD, and trajectory
   post-processing) built on top of BioExcel Building Blocks (BioBB).
 type: software
-version: "0.0.5"
+version: "0.1.0"
 license: CC-BY-NC-SA-4.0
 repository-code: "https://github.com/NBDsoftware/biobb_md_workflows"
 authors:

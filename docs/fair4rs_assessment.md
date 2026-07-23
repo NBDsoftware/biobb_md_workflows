@@ -11,7 +11,7 @@ Legend: 🟢 real / settled · 🟡 partial/aspirational · 🔴 missing or unde
 
 | Principle | Reality in the repo | Status |
 |---|---|---|
-| **Findable** | Public GitHub repo, git tags (`0.0.1`–`0.0.5`), GitHub Pages docs, Colab tutorial. `__version__` now exposed (via `importlib.metadata`) and logged at the start of every run. `CITATION.cff` added. Zenodo DOI planned. | 🟡 |
+| **Findable** | Public GitHub repo, git tags (`0.0.1`–`0.1.0`), GitHub Pages docs, Colab tutorial. `__version__` now exposed (via `importlib.metadata`) and logged at the start of every run. `CITATION.cff` added. Zenodo DOI planned. | 🟡 |
 | **Accessible** | Repo + tags + `LICENSE` present.  License is **CC BY-NC-SA** — academic-open / commercially-restricted choice. | 🟢 |
 | **Interoperable** | Standard formats in/out (PDB/GRO/TOP/XTC), YAML config, thin argparse CLIs, importable workflow functions. | 🟢 |
 | **Reusable** | `--help` + docs exist; reproducibility in place (pinned deps + tagged forks). | 🟢 |
