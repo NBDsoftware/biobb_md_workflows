@@ -22,4 +22,4 @@ dependencies:
     - biobb_md_workflows @ git+https://github.com/NBDsoftware/biobb_md_workflows
     # Forks pinned to fork-namespaced tags (nbd-*) for reproducibility.
     - biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs@nbd-5.3.0
-    - biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis@nbd-5.2.1
+    - biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis@nbd-5.3.0
