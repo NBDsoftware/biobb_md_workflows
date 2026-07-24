@@ -536,9 +536,9 @@ def traj_postprocessing(
         debug=debug,
         solvent_selection=solvent_selection,
         output_selection=output_selection,
-        structure_path=input_structure_path,
-        input_topology_path=input_topology_path,
-        input_traj_path=input_traj_path,
+        structure_path=os.path.abspath(input_structure_path),
+        input_topology_path=os.path.abspath(input_topology_path),
+        input_traj_path=os.path.abspath(input_traj_path),
         fast=fast,
         restart=restart
     )
