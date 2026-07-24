@@ -18,6 +18,7 @@ from biobb_md_workflows import __version__
 
 from biobb_gromacs.gromacs.make_ndx import make_ndx
 from biobb_gromacs.gromacs.editconf import editconf
+from biobb_gromacs.gromacs.convert_tpr import convert_tpr
 from biobb_analysis.gromacs.gmx_image import gmx_image
 from biobb_analysis.gromacs.gmx_trjconv_trj import gmx_trjconv_trj
 from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
@@ -142,8 +143,57 @@ def get_input_pdb(input_structure: str, gmx_bin: str, output_path: str) -> str:
         output_gro_path=output_pdb,
         properties={'binary_path': gmx_bin}
     )
-    
+
     return output_pdb
+
+def build_dry_tpr(full_tpr: str, full_ndx: str, group_name: str, gmx_bin: str, output_path: str) -> str:
+    """
+    Trim the full-system tpr down to the atoms of `group_name` (e.g. Output_group), producing a
+    "dry" tpr whose atom set and numbering match the stripped trajectory. Returns its path.
+    """
+    step_dir = os.path.join(output_path, 'dry_topology')
+    os.makedirs(step_dir, exist_ok=True)
+    dry_tpr = os.path.join(step_dir, 'dry.tpr')
+    convert_tpr(
+        input_tpr_path=full_tpr,
+        output_tpr_path=dry_tpr,
+        input_ndx_path=full_ndx,
+        properties={'binary_path': gmx_bin, 'output_group': group_name}
+    )
+    return dry_tpr
+
+def build_dry_index(dry_tpr: str, gmx_bin: str, output_path: str, central_index: Optional[int]) -> str:
+    """
+    Build an index file in the dry (stripped) atom numbering, exposing the group names the
+    post-processing steps expect: `Solute_group`, `Output_group` and (optionally) `Center`.
+
+    The dry system is solute-only after stripping, so both Solute_group and Output_group are the
+    whole dry system ("System"). make_ndx is run on the dry tpr so the numbering matches the
+    Output_group dry trajectory. If `central_index` is None (dry structure extraction failed) the
+    Center group is omitted; callers fall back to centering on Solute_group.
+    """
+    step_dir = os.path.join(output_path, 'dry_index')
+    os.makedirs(step_dir, exist_ok=True)
+
+    base_ndx = os.path.join(step_dir, 'base.ndx')
+    make_ndx(input_structure_path=dry_tpr, output_ndx_path=base_ndx,
+             properties={'binary_path': gmx_bin})
+
+    solute_ndx = os.path.join(step_dir, 'solute.ndx')
+    make_ndx(input_structure_path=dry_tpr, input_ndx_path=base_ndx, output_ndx_path=solute_ndx,
+             properties={'binary_path': gmx_bin, 'selection': '"System"'})
+    rename_last_ndx_group(solute_ndx, solute_group)
+
+    output_ndx = os.path.join(step_dir, 'output.ndx')
+    make_ndx(input_structure_path=dry_tpr, input_ndx_path=solute_ndx, output_ndx_path=output_ndx,
+             properties={'binary_path': gmx_bin, 'selection': '"System"'})
+    rename_last_ndx_group(output_ndx, output_group)
+
+    if central_index is not None:
+        final_ndx = os.path.join(step_dir, 'index.ndx')
+        add_group([central_index], 'Center', output_ndx, final_ndx)
+        return final_ndx
+    return output_ndx
 
 def common_config_contents(
     gmx_bin: str = 'gmx',
@@ -474,6 +524,8 @@ def traj_postprocessing(
         residues_to_keep:
             residue indices to retain in the output besides the solute.
             Default: None (only solute)
+            NOTE: when the trajectory is stripped, the centering atom is derived from the solute-only
+            dry structure, so with residues_to_keep the center may be slightly off (known limitation).
         extra_ions:
             additional ion atom names to include in the solvent group (e.g. --ions NA+ CA2+). Default: []
         extra_solvents:
@@ -564,7 +616,8 @@ def traj_postprocessing(
     all_groups = read_groups(paths['step1_make_ndx']['output_ndx_path'])
     
     # Check if a Solvent group was added correctly
-    if len(all_groups) > len(default_groups):
+    solvent_created = len(all_groups) > len(default_groups)
+    if solvent_created:
         # If there is a solvent group, rename it and leave solute/output selections as they are
         global_log.info(f"Renaming last created group to {solvent_group}")
         rename_last_ndx_group(paths['step1_make_ndx']['output_ndx_path'], solvent_group)
@@ -586,10 +639,15 @@ def traj_postprocessing(
 
     input_ndx_path = paths['step3_make_ndx']['output_ndx_path']
 
+    # The trajectory is only reduced (renumbered) when a solvent group was stripped. When nothing
+    # is stripped (--keep_solvent, or no solvent group detected -> Output_group == System) the full
+    # tpr + full index already match the trajectory, so the dry-tpr rewiring below is skipped.
+    needs_trim = solvent_created and not keep_solvent
+
     ########################################
     # Extract solute and find central atom #
     ########################################
-    
+
     centering_step = 'step7_center' if fast else 'step11_center'
 
     # Extract the solute from the input structure
@@ -604,18 +662,45 @@ def traj_postprocessing(
         global_log.exception("Structure post-processing failed with unexpected exception")
         dry_str_ok = False
 
-    # Extract central atom index from solute to center the trajectory
+    # Extract central atom index from the dry structure (dry numbering) to center the trajectory
     if dry_str_ok:
-        os.mkdir(os.path.join(output_path, 'step5_center_group'))
-        center_ndx_path = os.path.join(output_path, 'step5_center_group', 'center.ndx')
         central_index = get_central_atom_index(paths['step4_dry_str']['output_str_path'])
         global_log.info(f"Central atom index for centering: {central_index}")
-        add_group([central_index], 'Center', input_ndx_path, center_ndx_path)
-        paths[centering_step]['input_index_path'] = center_ndx_path
     else:
-        # Fall back to centering on the whole solute group
+        central_index = None
         global_log.warning("Structure post-processing failed falling back to Solute_group for centering")
-        prop[centering_step]['center_selection'] = solute_group
+
+    if needs_trim:
+        # Build a dry tpr (Output_group subset) and a dry index so the post-strip steps operate in the stripped trajectory
+        global_log.info("Building dry topology (convert-tpr) and dry index for post-processing")
+        dry_tpr = build_dry_tpr(os.path.abspath(input_topology_path), input_ndx_path,
+                                output_group, gmx_bin, output_path)
+        dry_ndx = build_dry_index(dry_tpr, gmx_bin, output_path, central_index)
+
+        # Rewire post-strip steps to the dry tpr (-s) and dry index (-n)
+        if fast:
+            post_steps = ['step7_center', 'step8_image', 'step9_fit']
+        else:
+            post_steps = ['step7_whole', 'step8_cluster', 'step9_extract_ref', 'step10_nojump',
+                          'step11_center', 'step12_image', 'step13_fit']
+        # step10_nojump already uses a dry .gro reference as -s step9_extract_ref/output_traj_path
+        for step in post_steps:
+            paths[step]['input_index_path'] = dry_ndx
+            if step != 'step10_nojump':
+                paths[step]['input_top_path'] = dry_tpr
+
+        if central_index is None:
+            # Center group could not be built; fall back to centering on the whole solute group
+            prop[centering_step]['center_selection'] = solute_group
+    else:
+        # No stripping: keep the original behavior (full tpr + full index, Center on the full index)
+        if dry_str_ok:
+            os.mkdir(os.path.join(output_path, 'step5_center_group'))
+            center_ndx_path = os.path.join(output_path, 'step5_center_group', 'center.ndx')
+            add_group([central_index], 'Center', input_ndx_path, center_ndx_path)
+            paths[centering_step]['input_index_path'] = center_ndx_path
+        else:
+            prop[centering_step]['center_selection'] = solute_group
 
     #########################################################################
     # Process trajectory: strip, whole, nojump, cluster, center, image, fit #
