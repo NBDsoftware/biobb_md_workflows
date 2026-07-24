@@ -25,10 +25,10 @@ from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
 
 # Constants
 # Possible ion names not recognized by GROMACS default "Ion" group
-ions_library : List = ["K+", "CL-", "MG"]
+ions_library : List = ["K+", "CL-", "MG", "Cl-", "Na+"]
 
 # All other solvent names not recognized by GROMACS default "SOL" group
-solvent_library : List = []
+solvent_library : List = ["WAT", "SOL"]
 
 # Group names used for T-coupling and trajectory post-processing
 solvent_group : str = "Solvent_group"
