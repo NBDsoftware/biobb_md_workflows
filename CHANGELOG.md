@@ -35,7 +35,7 @@ All notable changes to this project are documented here.
 - Default installation is non-editable and installs from a pinned git tag.
 
 ### Dependencies
-- Pinned the `biobb_gromacs` and `biobb_analysis` NBD forks to the `nbd-5.3.0` and `nbd-5.2.1` tags for
+- Pinned the `biobb_gromacs` and `biobb_analysis` NBD forks to the `nbd-5.3.0` and `nbd-5.3.0` tags for
   reproducible installs.
 - Pinned `mdanalysis==2.10.0` and `biopython==1.87`; added `pyyaml`.
 

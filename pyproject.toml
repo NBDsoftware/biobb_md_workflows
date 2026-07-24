@@ -20,7 +20,7 @@ dependencies = [
     # Pinned to fork-namespaced tags (nbd-*) so installs are reproducible and
     # don't collide with upstream's future tags. Bump these when re-tagging.
     "biobb_gromacs @ git+https://github.com/NBDsoftware/biobb_gromacs@nbd-5.3.0",
-    "biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis@nbd-5.2.1",
+    "biobb_analysis @ git+https://github.com/NBDsoftware/biobb_analysis@nbd-5.3.0",
     # Required by md_gromacs, ligand_parameterization, protein_preparation.
     "biobb_amber>=5.2.1",
     "biobb_chemistry>=5.2.1",
