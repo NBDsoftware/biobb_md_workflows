@@ -162,28 +162,45 @@ def build_dry_tpr(full_tpr: str, full_ndx: str, group_name: str, gmx_bin: str, o
     )
     return dry_tpr
 
-def build_dry_index(dry_tpr: str, gmx_bin: str, output_path: str, central_index: Optional[int]) -> str:
+def build_dry_index(dry_tpr: str, solvent_selection: str, gmx_bin: str, output_path: str,
+                    central_index: Optional[int]) -> str:
     """
     Build an index file in the dry (stripped) atom numbering, exposing the group names the
     post-processing steps expect: `Solute_group`, `Output_group` and (optionally) `Center`.
 
-    The dry system is solute-only after stripping, so both Solute_group and Output_group are the
-    whole dry system ("System"). make_ndx is run on the dry tpr so the numbering matches the
-    Output_group dry trajectory. If `central_index` is None (dry structure extraction failed) the
-    Center group is omitted; callers fall back to centering on Solute_group.
+    make_ndx is run on the dry tpr so the numbering matches the Output_group dry trajectory.
+    `Output_group` is always the whole dry system ("System"). `Solute_group` (used for fit/cluster)
+    is the solute only: when the dry system still contains solvent/ions (e.g. residues retained via
+    --keep_residues) it is the complement of the detected Solvent_group; otherwise (default case,
+    no solvent left after stripping) it is the whole system. If `central_index` is None (dry
+    structure extraction failed) the Center group is omitted; callers fall back to Solute_group.
     """
     step_dir = os.path.join(output_path, 'dry_index')
     os.makedirs(step_dir, exist_ok=True)
 
+    # Default groups on the dry system
     base_ndx = os.path.join(step_dir, 'base.ndx')
     make_ndx(input_structure_path=dry_tpr, output_ndx_path=base_ndx,
              properties={'binary_path': gmx_bin})
+    default_groups = read_groups(base_ndx)
 
+    # Try to detect leftover solvent/ions (present only when residues were retained)
+    solvent_ndx = os.path.join(step_dir, 'solvent.ndx')
+    make_ndx(input_structure_path=dry_tpr, input_ndx_path=base_ndx, output_ndx_path=solvent_ndx,
+             properties={'binary_path': gmx_bin, 'selection': solvent_selection})
+    if len(read_groups(solvent_ndx)) > len(default_groups):
+        rename_last_ndx_group(solvent_ndx, solvent_group)
+        solute_selection = f'! "{solvent_group}"'
+    else:
+        solute_selection = '"System"'
+
+    # Solute group (fit/cluster selection): solute only
     solute_ndx = os.path.join(step_dir, 'solute.ndx')
-    make_ndx(input_structure_path=dry_tpr, input_ndx_path=base_ndx, output_ndx_path=solute_ndx,
-             properties={'binary_path': gmx_bin, 'selection': '"System"'})
+    make_ndx(input_structure_path=dry_tpr, input_ndx_path=solvent_ndx, output_ndx_path=solute_ndx,
+             properties={'binary_path': gmx_bin, 'selection': solute_selection})
     rename_last_ndx_group(solute_ndx, solute_group)
 
+    # Output group: the whole dry system (the dry trajectory is the full Output_group set)
     output_ndx = os.path.join(step_dir, 'output.ndx')
     make_ndx(input_structure_path=dry_tpr, input_ndx_path=solute_ndx, output_ndx_path=output_ndx,
              properties={'binary_path': gmx_bin, 'selection': '"System"'})
@@ -263,17 +280,17 @@ step3_make_ndx:
 # Section 2: Structure and trajectory processing  #
 ###################################################
 
-# Center on solute  
+# Extract the output structure (solute + any kept residues), matching the dry trajectory
 step4_dry_str:
   tool: gmx_trjconv_str
-  paths: 
+  paths:
     input_structure_path: {structure_path}
     input_top_path: {input_topology_path}
     input_index_path: dependency/step3_make_ndx/output_ndx_path
     output_str_path: dry_structure.pdb
   properties:
-    binary_path: {gmx_bin}     
-    selection: "{solute_group}"
+    binary_path: {gmx_bin}
+    selection: "{output_group}"
     center: false
     pbc: none
     
@@ -524,8 +541,6 @@ def traj_postprocessing(
         residues_to_keep:
             residue indices to retain in the output besides the solute.
             Default: None (only solute)
-            NOTE: when the trajectory is stripped, the centering atom is derived from the solute-only
-            dry structure, so with residues_to_keep the center may be slightly off (known limitation).
         extra_ions:
             additional ion atom names to include in the solvent group (e.g. --ions NA+ CA2+). Default: []
         extra_solvents:
@@ -675,7 +690,7 @@ def traj_postprocessing(
         global_log.info("Building dry topology (convert-tpr) and dry index for post-processing")
         dry_tpr = build_dry_tpr(os.path.abspath(input_topology_path), input_ndx_path,
                                 output_group, gmx_bin, output_path)
-        dry_ndx = build_dry_index(dry_tpr, gmx_bin, output_path, central_index)
+        dry_ndx = build_dry_index(dry_tpr, solvent_selection, gmx_bin, output_path, central_index)
 
         # Rewire post-strip steps to the dry tpr (-s) and dry index (-n)
         if fast:
