@@ -3,6 +3,7 @@
 # Importing all the needed libraries
 from typing import List, Dict, Union, Optional, Literal
 from pathlib import Path
+import logging
 import propka.run
 import argparse
 import shutil
@@ -30,6 +31,7 @@ from biobb_model.model.mutate import mutate
 from biobb_structure_utils.utils.extract_molecule import extract_molecule
 from biobb_structure_utils.utils.renumber_structure import renumber_structure
 from biobb_pdb_tools.pdb_tools.biobb_pdb_tofasta import biobb_pdb_tofasta
+from biobb_pdb_tools.pdb_tools.biobb_pdb_fetch import biobb_pdb_fetch
 from biobb_amber.pdb4amber.pdb4amber_run import pdb4amber_run
 from biobb_chemistry.ambertools.reduce_remove_hydrogens import reduce_remove_hydrogens
 
@@ -89,6 +91,36 @@ nonstd_titra_resnames = {
     'LYN', 'ASH', 'GLH', 'HID', 'HIE', 'HIP',                       # amber variants
     'LYSN', 'ARGN', 'ASPH', 'GLUH', 'HISD', 'HISE', 'HISH', 'HIS1'  # gromacs variants
 }
+
+def check_inputs(
+    global_log: logging.Logger,
+    input_pdb_path: Optional[str], 
+    pdb_code: Optional[str]) -> Optional[Literal['input_structure', 'pdb_code']]:
+    """
+    Check the inputs of the workflow
+    
+    1. Check if any of the compulsory input files are provided and if they exist.
+    
+    Inputs
+    ------
+        global_log: Logger object for logging messages.
+        input_pdb_path (str): Path to the input PDB file.
+        pdb_code (str): PDB code of the protein
+    """
+    
+    # If input structure is given check its existence
+    if input_pdb_path:
+        if not os.path.exists(input_pdb_path):
+            global_log.error(f"Input PDB file {input_pdb_path} not found.")
+            raise FileNotFoundError(f"Input PDB file {input_pdb_path} not found.")
+        return 'input_structure'
+    elif pdb_code:
+        # TODO: Check its a valid PDB code
+        return 'pdb_code'
+    else:
+        global_log.error("Either --input_pdb or --pdb_code must be given.")
+        raise ValueError("Either --input_pdb or --pdb_code must be given.")
+
 
 # Biopython helpers
 def highest_occupancy_altlocs(pdb_file, global_log) -> List[str]:
@@ -860,6 +892,7 @@ def biobb_titrate(input_structure_path: str, output_structure_path: str, propert
            
 # YML construction
 def config_contents(
+    pdb_code : str,
     input_pdb_path : str,
     pdb_chains: Optional[List],
     mutation_list: Optional[List],
@@ -900,8 +933,9 @@ def config_contents(
     # use_modeller is enabled only where a key is available.
     use_modeller = to_yaml(modeller_key is not None)
     
-    # Convert into absolute path
-    input_pdb_path = os.path.abspath(input_pdb_path)
+    # Convert into absolute path (only when a structure file was given, not in pdb_code mode)
+    if input_pdb_path is not None:
+        input_pdb_path = os.path.abspath(input_pdb_path)
 
     return f"""
 # Global properties (common for all steps)
@@ -910,6 +944,15 @@ global_properties:
   can_write_console_log: false                                      # Verbose writing of log information
   restart: {to_yaml(restart)}                                       # Skip steps already performed
   remove_tmp: {to_yaml(not debug)}                                  # Remove temporal files
+
+# Step 0 (Optional): fetch PDB structure from RCSB website
+step0_fetchPDB:
+  tool: biobb_pdb_fetch
+  paths:
+    output_file_path: structure.pdb
+  properties:
+    biounit: false
+    pdbid: {pdb_code}
 
 # Step 1: extract atoms from input PDB file
 step1_extractAtoms:
@@ -1091,7 +1134,7 @@ def create_config_file(output_path: str,
 
 # Main workflow
 def protein_preparation(
-    input_pdb_path: str,
+    input_pdb_path: Optional[str] = None,
     pdb_code: Optional[str] = None, 
     pdb_chains: Optional[List] = None, 
     mutation_list: Optional[List] = None, 
@@ -1119,7 +1162,9 @@ def protein_preparation(
         input_pdb_path: 
             path to input PDB file
         pdb_code: 
-            PDB code to be used to get the canonical FASTA sequence
+            PDB code to download the structure (if --input_pdb is not given) 
+            and the canonical FASTA sequence. If not given the workflow will look 
+            for it in the HEADER of the PDB file.
         pdb_chains: 
             list of chains to be extracted from the PDB file and fixed
         mutation_list: 
@@ -1178,8 +1223,11 @@ def protein_preparation(
     global_log, _ = fu.get_logs(path=output_path, light_format=True)
     global_log.info(f"biobb_md_workflows version {__version__}")
     
+    input_mode = check_inputs(global_log, input_pdb_path, pdb_code)
+    
     # Create the configuration file
     config_args = {
+        'pdb_code': pdb_code,
         'input_pdb_path' : input_pdb_path,
         'pdb_chains' : pdb_chains,
         'mutation_list' : mutation_list,
@@ -1202,7 +1250,13 @@ def protein_preparation(
     # Dividing it in global paths and global properties
     global_prop = conf.get_prop_dic(global_log=global_log)
     global_paths = conf.get_paths_dic()
-
+    
+    # STEP 0: fetch PDB structure from RCSB website
+    if input_mode == 'pdb_code':
+        global_log.info("step0_fetchPDB: Fetch PDB structure from RCSB website")
+        biobb_pdb_fetch(**global_paths["step0_fetchPDB"], properties=global_prop["step0_fetchPDB"])
+        global_paths["step1_extractAtoms"]["input_structure_path"] = global_paths["step0_fetchPDB"]["output_file_path"]
+        
     # STEP 1: extract main structure of interest while removing water and ligands (heteroatoms)
     global_log.info("step1_extractAtoms: extract chain of interest")
     extract_molecule(**global_paths["step1_extractAtoms"], properties=global_prop["step1_extractAtoms"])
@@ -1399,7 +1453,8 @@ def protein_preparation(
     # NOTE: We should make sure that PDB complies with the PDB format (while considering 4 letter resnames)
     
     # Copy the final PDB file to the output path
-    final_pdb_path = os.path.join(output_path, f"{Path(input_pdb_path).stem}.pdb")
+    output_stem = Path(input_pdb_path).stem if input_pdb_path is not None else pdb_code
+    final_pdb_path = os.path.join(output_path, f"{output_stem}.pdb")
     shutil.copy(last_pdb_path, final_pdb_path)
 
     # Write a stable output manifest for external consumers (see manifest.yaml in output_path)
@@ -1436,12 +1491,13 @@ def main():
     parser = argparse.ArgumentParser("Protein preparation with biobb_structure_checking and Modeller")
 
     parser.add_argument('--input_pdb', dest='input_pdb_path', type=str,
-                        help="Input PDB file.",
-                        required=True)
+                        help="Input PDB file. This takes precedence over --pdb_code",
+                        required=False)
 
     parser.add_argument('--pdb_code', dest='pdb_code', type=str,
-                        help="""PDB code to get the canonical FASTA sequence of the input PDB file. 
-                        If not given the workflow will look for it in the HEADER of the PDB. Default: None""",
+                        help="""PDB code to download the structure (if --input_pdb is not given) 
+                        and the canonical FASTA sequence. If not given the workflow will look 
+                        for it in the HEADER of the PDB file. Default: None""",
                         required=False)
 
     parser.add_argument('--pdb_chains', nargs='+', dest='pdb_chains',
