@@ -1,11 +1,11 @@
 # FAIR4RS & Robustness Assessment
 
 A review of how well `biobb_md_workflows` meets **FAIR4RS** and
-data-pipeline-engineering principles, plus a phased roadmap to close the gaps.
+data-pipeline-engineering principles, plus a roadmap to close the gaps.
 
 ## Where the project stands today
 
-Legend: 🟢 real / settled · 🟡 partial/aspirational · 🔴 missing or undermined.
+Legend: 🟢 settled · 🟡 partial · 🔴 missing
 
 ### FAIR4RS
 
@@ -16,7 +16,7 @@ Legend: 🟢 real / settled · 🟡 partial/aspirational · 🔴 missing or unde
 | **Interoperable** | Standard formats in/out (PDB/GRO/TOP/XTC), YAML config, thin argparse CLIs, importable workflow functions. | 🟢 |
 | **Reusable** | `--help` + docs exist; reproducibility in place (pinned deps + tagged forks). | 🟢 |
 
-### Engineering / pipeline robustness
+### Robustness
 
 | Principle | Reality in the repo | Status |
 |---|---|---|
@@ -27,40 +27,33 @@ Legend: 🟢 real / settled · 🟡 partial/aspirational · 🔴 missing or unde
 | **Validation** | Step outputs are validated **internally by the biobbs** — each building block checks its own outputs, so the workflow layer does not need to re-assert file existence between steps. Remaining gaps are at the CLI boundary: no argparse `choices` for enums, no `--ph` bounds, and several bad-arg paths log an error then silently `return`. Only `md_gromacs` has a real `check_inputs()`. | 🟡 |
 
 
-## Roadmap (cheapest → most involved)
+## Roadmap
 
-Effort tags are rough: **S** = hours · **M** = a day or two · **L** = a week+.
-
-### Phase 1 — Stop reporting false success *(S, do first)*
-- Gate the final `"Execution successful"` message on real completion; on a caught
-  failure, log the error and `sys.exit(1)`.
+### 1. Improve clarity of errors
 - (Step-output existence between steps is already handled internally by the biobbs;
   where their failure message is unclear, surface a clearer workflow-level message.)
 
-### Phase 2 — Provenance *(M, high value)*
+### 2. Provenance
 
-- Future: one shared helper writing `output/run_manifest.json` — git commit (if
+- One shared helper writing `output/run_manifest.json` — git commit (if
   resolvable), full `sys.argv`, SHA-256 of each input file, UTC timestamp, resolved
   `config.yml` path, and a `conda env export` / `pip freeze` snapshot.
 
-### Phase 4 — Validation hardening *(M)*
+### 3. Validation
 - argparse `choices=` for the `format`/`output_format`/protonation-tool enums; `--ph`
   bounds `[0, 14]`; convert "log-error-then-`return`" silent exits into `raise`.
 - Generalize the `md_gromacs.check_inputs()` pattern to the other three workflows.
 
-### Phase 5 — Testing & automation *(L)*
-- Minimal GitHub Actions CI: `ruff` lint + `pip install .` import-smoke + package build.
-- `pre-commit` with `ruff` for local guardrails.
+### 4. Testing & automation
+- Minimal GitHub Actions CI: `ruff` lint + `pip install .`
 - One tiny end-to-end smoke test on a small system (reuse `tests/*/input.yml`);
   parameterize the hard-coded env path in `run.sl`.
 - Dependency automation (Dependabot/Renovate) watching the two forks.
-- De-duplicate the copy-pasted `create_config_file`/config scaffolding into `common/`
-  (deferred — delicate).
 
-### Phase 6 — FAIR4RS metadata & portability *(L, stretch)*
+### 5. FAIR4RS metadata & portability
 
-- Mint a **Zenodo DOI** for easy academic citation: (1) an NBDsoftware org admin
-  authorizes Zenodo for the org, (2) enable the repo in Zenodo, (3) cut a GitHub Release
+- Mint a **Zenodo DOI** for easy academic citation: (1) org admin
+  authorizes Zenodo for the NBDsoftware org, (2) enable the repo in Zenodo, (3) cut a GitHub Release
   → DOI auto-minted, (4) paste the concept-DOI into `CITATION.cff` and a README badge.
 - `CHANGELOG.md`.
 - License: **settled** — Explore other options more appropiate for code.
