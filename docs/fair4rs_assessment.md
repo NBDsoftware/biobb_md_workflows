@@ -20,18 +20,17 @@ Legend: 🟢 settled · 🟡 partial · 🔴 missing
 
 | Principle | Reality in the repo | Status |
 |---|---|---|
-| **Reproducibility** | Floor now in place: all forks are pinned (`biobb_gromacs`, `biobb_analysis`) to fork-namespaced tags; `mdanalysis`, `biopython`, `ambertools`, `acpype`, `openbabel`, `propka` are version-pinned. | 🟡 |
-| **Provenance** | `config.yml` + absolute input path are written per run; `log.out` and per-step logs exist. Package version is now logged in the `log.out` header. Full CLI command, and input-file checksums are still recorded nowhere (full `run_manifest.json` remains future work). | 🟡 |
+| **Reproducibility** | All forks are pinned to fork-namespaced tags; other dependencies are version-pinned. | 🟢 |
+| **Provenance** | configuration and absolute input paths are written per run; `log.out` and per-step logs exist. Package version is now logged in the log header. Full CLI command, and input-file checksums are still not recorded (full `run_manifest.json` remains future work). | 🟡 |
 | **Environment portability** | Conda env files exist; deps + forks now pinned. No container yet. | 🟡 |
-| **Modularity** | Genuinely modular at the BioBB-step level. `create_config_file`/config scaffolding is copy-pasted across all four workflows (only `common.to_yaml` is shared). **De-duplication is deferred — delicate** (each workflow's config differs subtly). | 🟡 |
-| **Validation** | Step outputs are validated **internally by the biobbs** — each building block checks its own outputs, so the workflow layer does not need to re-assert file existence between steps. Remaining gaps are at the CLI boundary: no argparse `choices` for enums, no `--ph` bounds, and several bad-arg paths log an error then silently `return`. Only `md_gromacs` has a real `check_inputs()`. | 🟡 |
+| **Modularity** | Genuinely modular at the BioBB-step level. `create_config_file`/config scaffolding is copy-pasted across all four workflows. Creation of common modules pending. | 🟡 |
+| **Validation** | Step outputs are validated **internally by the biobbs** — each building block checks its own outputs. Remaining gaps are at the CLI boundary: no argparse `choices` for enums, no `--ph` bounds, and several bad-arg paths log an error then silently `return`. Only `md_gromacs` has a real `check_inputs()`. | 🟡 |
 
 
 ## Roadmap
 
 ### 1. Improve clarity of errors
-- (Step-output existence between steps is already handled internally by the biobbs;
-  where their failure message is unclear, surface a clearer workflow-level message.)
+- Surface a clearer workflow-level message for the different failure modes.
 
 ### 2. Provenance
 
@@ -46,8 +45,7 @@ Legend: 🟢 settled · 🟡 partial · 🔴 missing
 
 ### 4. Testing & automation
 - Minimal GitHub Actions CI: `ruff` lint + `pip install .`
-- One tiny end-to-end smoke test on a small system (reuse `tests/*/input.yml`);
-  parameterize the hard-coded env path in `run.sl`.
+- One tiny end-to-end smoke test on a small system (reuse `tests/*/input.yml`)
 - Dependency automation (Dependabot/Renovate) watching the two forks.
 
 ### 5. FAIR4RS metadata & portability
