@@ -4,7 +4,7 @@ Fix PDB defects, choose protonation states for titratable residues, and prepare 
 
 ## Description
 
-Starting from a raw PDB, the workflow:
+Starting from a raw PDB (or a PDB code fetched from RCSB via `--pdb_code`), the workflow:
 
 1. **Extracts** the requested chains from the input structure.
 2. **Fixes PDB defects:**
@@ -28,6 +28,9 @@ Starting from a raw PDB, the workflow:
 ```bash
 conda activate biobb_md
 protein_preparation --input_pdb data/1r9o.pdb --ph 7 --cap_ter --output_format gromacs --output output
+
+# Or fetch the structure directly from RCSB instead of a local file:
+protein_preparation --pdb_code 1r9o --ph 7 --cap_ter --output_format gromacs --output output
 ```
 
 Run `protein_preparation --help` for the full option list.
@@ -36,8 +39,8 @@ Run `protein_preparation --help` for the full option list.
 
 | Flag&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Default | Description |
 |------|---------|-------------|
-| `--input_pdb` | *required* | Input PDB file. |
-| `--pdb_code` | `None` | PDB code used to fetch the canonical FASTA sequence. If omitted, the PDB HEADER is used. |
+| `--input_pdb` | `None` | Input PDB file. One of `--input_pdb` / `--pdb_code` is required; `--input_pdb` takes precedence if both are given. |
+| `--pdb_code` | `None` | PDB code. Used to download the structure from RCSB if `--input_pdb` is not given, and to fetch the canonical FASTA sequence. If omitted, the PDB HEADER is used for the FASTA sequence. |
 | `--pdb_chains` | all chains | Chains to extract and fix (e.g. `A B C`). |
 | `--mutation_list` | `None` | Mutations to introduce in the  `Chain:WtResnumMut` format (e.g. `A:Arg220Ala B:Ser221Gly`). |
 | `--skip_bc_fix` | `False` | Skip modeling of missing backbone atoms. |
@@ -117,7 +120,7 @@ Files:
 
 Written into `--output`, organized by steps:
 
-- The prepared PDB structure (named after the input), ready for `md_gromacs`: `<output_folder>/<pdb_name>.pdb`
+- The prepared PDB structure (named after the input file, or the `--pdb_code` if no input file was given), ready for `md_gromacs`: `<output_folder>/<pdb_name>.pdb`
 - `config.yml` — the generated configuration used for the run.
 - `log.out` and per-step directories (`step*_*`) for inspection.
 
