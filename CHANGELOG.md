@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Added
+- **protein_preparation**: `--pdb_code` can now be used on its own (without `--input_pdb`) to
+  fetch the structure directly from RCSB.
+
 ## [0.1.0] - 2026-07-23
 
 ### ⚠️ Breaking changes
