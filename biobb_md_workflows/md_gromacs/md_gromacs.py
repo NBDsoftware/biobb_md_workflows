@@ -3,7 +3,6 @@
 # Importing all the needed libraries
 from typing import List, Dict, Union, Optional, Literal, Tuple, Any
 from pathlib import Path
-import numpy as np
 import logging
 import argparse
 import time
@@ -30,14 +29,24 @@ from biobb_gromacs.gromacs_extra.ndx2resttop import ndx2resttop
 from biobb_analysis.gromacs.gmx_rms import gmx_rms
 from biobb_analysis.gromacs.gmx_rgyr import gmx_rgyr
 from biobb_analysis.gromacs.gmx_energy import gmx_energy
-from biobb_analysis.gromacs.gmx_image import gmx_image
-from biobb_analysis.gromacs.gmx_trjconv_trj import gmx_trjconv_trj
 from biobb_analysis.gromacs.gmx_trjconv_str import gmx_trjconv_str
 from biobb_analysis.ambertools.cpptraj_rmsf import cpptraj_rmsf
 from biobb_analysis.ambertools.cpptraj_rms import cpptraj_rms
 from biobb_structure_utils.utils.cat_pdb import cat_pdb
 
-from biobb_md_workflows.common import to_yaml
+from biobb_md_workflows.common import (
+    build_solvent_selection,
+    get_atom_types,
+    get_residue_types,
+    ions_library,
+    output_group,
+    rename_last_ndx_group,
+    solute_group,
+    solvent_group,
+    solvent_library,
+    to_yaml,
+)
+from biobb_md_workflows.traj_postprocessing.traj_postprocessing import traj_postprocessing
 from biobb_md_workflows import __version__
 
 # Constants
@@ -49,17 +58,6 @@ gmx_titra_resnames = {
     'ASP': ('ASP', 'ASPH'),                 # deprotonated, protonated
     'GLU': ('GLU', 'GLUH')                  # deprotonated, protonated
 }
-
-# Possible ion names in the input structure not recognized by GROMACS
-ions_library = ["K+", "CL-", "MG"]
-
-# All other solvent names in the input structure not recognized by GROMACS
-solvent_library = []
-
-# Names for solute, solvent groups and output groups - for T coupling and Traj post-processing
-solvent_group = "Solvent_group"
-solute_group = "Solute_group"
-output_group = "Output_group"
 
 def check_inputs(
     global_log: logging.Logger,
@@ -468,70 +466,6 @@ def read_protonation_states(pdb_file: str, resname: str, global_log) -> List[str
     
     return protonation_states_list
 
-def get_residue_types(pdb_path: str, target_resnames: List[str]) -> List[str]:
-    """  
-    Load the pdb path with BioPython and find if any residue names from the 
-    target_resnames list exist in the structure.
-    
-    Inputs
-    ------
-        pdb_path (str): Path to the pdb file.
-        target_resnames (List[str]): List of residue names to search for (e.g., ions or solvents).
-    
-    Returns
-    -------
-        list
-            list of unique residue names found in the structure that match the target list.
-    """
-    parser = PDBParser(QUIET=True)
-    structure = parser.get_structure("struct", pdb_path)
-    
-    found_residues = set()
-    
-    # We convert the target library to a set for O(1) lookup speed
-    # This is important if your structure has 50,000+ water molecules
-    target_set = set(target_resnames)
-    
-    for residue in structure.get_residues():
-        res_name = residue.get_resname().strip()
-        
-        if res_name in target_set:
-            found_residues.add(res_name)
-            
-    return list(found_residues)
-
-def get_atom_types(pdb_path: str, target_atom_names: List[str]) -> List[str]:
-    """  
-    Load the pdb path and find if any atom names from the target list exist 
-    in the structure.
-    
-    Inputs
-    ------
-        pdb_path (str): Path to the pdb file.
-        target_atom_names (List[str]): List of atom names to search for.
-    
-    Returns
-    -------
-        list
-            list of unique atom names found in the structure.
-    """
-    parser = PDBParser(QUIET=True)
-    structure = parser.get_structure("struct", pdb_path)
-    
-    found_atoms = set()
-    # Convert list to set for faster lookup (O(1))
-    target_set = set(target_atom_names)
-    
-    # .get_atoms() is a generator that recursively yields every Atom in the structure
-    for atom in structure.get_atoms():
-        # Atom names in PDB are 4 chars. " CA " becomes "CA" after strip()
-        atom_name = atom.get_name().strip()
-        
-        if atom_name in target_set:
-            found_atoms.add(atom_name)
-            
-    return list(found_atoms)
-
 def check_residues_exist(pdb_path: str, residues_to_keep: List[int], global_log) -> None:
     """
     Verify if the requested residue indices exist in the input structure.
@@ -565,72 +499,6 @@ def check_residues_exist(pdb_path: str, residues_to_keep: List[int], global_log)
     else:
         global_log.info("All requested residues to keep are present in the structure.")
         
-def get_central_atom_index(pdb_path: str) -> int:
-    """
-    Find the index of the atom closest to the geometric center of a PDB file.
-    
-    Args:
-        pdb_path: Path to the PDB file
-        
-    Returns:
-        The atom index (1-based) of the atom closest to the geometric center
-    """
-    parser = PDBParser(QUIET=True)
-    structure = parser.get_structure("protein", pdb_path)
-    
-    # Collect all atoms and their coordinates
-    atoms = list(structure.get_atoms())
-    coords = np.array([atom.get_vector().get_array() for atom in atoms])
-    
-    # Calculate geometric center
-    center = coords.mean(axis=0)
-    
-    # Find atom closest to center
-    distances = np.linalg.norm(coords - center, axis=1)
-    central_atom_index = int(np.argmin(distances))+1
-    
-    return central_atom_index
-
-def add_group(atom_indices: List, group_name: str, old_ndx_path: str, new_ndx_path: str) -> None:
-    """
-    Add all the atom indices to a new group at the end of the old ndx file. Save the new ndx file onto
-    a different path.
-
-    Args:
-        atom_indices (List): List of atom indices to add to the new group.
-        group_name (str): Name of the new group.
-        old_ndx_path (str): Path to the existing index file.
-        new_ndx_path (str): Path to save the new index file.
-
-    Returns:
-        None
-    """
-    COLUMNS = 15
-
-    # Format the group header
-    group_block = f"\n[ {group_name} ]\n"
-
-    # Format indices in rows of 15, right-justified to match GROMACS style
-    for i, idx in enumerate(atom_indices):
-        group_block += f"{idx:>4}"
-        if (i + 1) % COLUMNS == 0:
-            group_block += "\n"
-        else:
-            group_block += " " if (i + 1) < len(atom_indices) else ""
-
-    # Ensure the block ends with a newline
-    if len(atom_indices) % COLUMNS != 0:
-        group_block += "\n"
-
-    # Read old ndx file and append the new group
-    with open(old_ndx_path, 'r') as f:
-        old_content = f.read()
-
-    with open(new_ndx_path, 'w') as f:
-        f.write(old_content)
-        f.write(group_block)
-
-
 # Process topology - temporal solution 
 def process_ligand_top(input_path: str, output_path: str) -> None:
     """
@@ -686,29 +554,6 @@ def process_ligand_top(input_path: str, output_path: str) -> None:
     with open(output_path, 'w') as f:
         f.writelines(new_lines)
 
-def rename_last_ndx_group(ndx_path: str, new_name: str) -> None:
-    """
-    Reads a GROMACS index (.ndx) file and renames the last group in the file.
-    
-    Args:
-        ndx_path (str): Path to the index file.
-        new_name (str): The new name for the group (e.g., 'Protein_Ligand').
-    """
-    with open(ndx_path, 'r') as f:
-        lines = f.readlines()
-
-    # Iterate backwards through the file to find the last group header
-    for i in range(len(lines) - 1, -1, -1):
-        line = lines[i].strip()
-        # Group headers in GROMACS look like: [ Group_Name ]
-        if line.startswith("[") and line.endswith("]"):
-            lines[i] = f"[ {new_name} ]\n"
-            break
-
-    # Overwrite the file with the corrected name
-    with open(ndx_path, 'w') as f:
-        f.writelines(lines)
-
 # Process input coordinates
 def get_input_pdb(input_pdb_path: Optional[str],
                   input_gro_path: Optional[str],
@@ -761,30 +606,6 @@ def get_input_pdb(input_pdb_path: Optional[str],
     
     return input_pdb_path
 
-def build_solvent_selection(solvent_names: List[str], ion_names: List[str]) -> str:
-    """ 
-    Create a GROMACS selection string based on the Default solvent and ion groups in 
-    GROMACS + the specific solvent and ion names provided. 
-    
-    These groups will be useful for Temperature coupling and post-processing of the traj
-    """
-
-    # Find the selection of default and additional solvent molecules
-    if solvent_names:
-        solvent_selection = f'"SOL" | {" | ".join(f"r {solvent}" for solvent in solvent_names)}'
-    else:
-        solvent_selection = f'"SOL"'
-    
-    # Find the selection of default and additional ions
-    if ion_names:
-        ions_selection = f'"Ion" | {" | ".join(f"a {ion}" for ion in ion_names)}'
-    else:
-        ions_selection = f'"Ion"'
-    
-    # Join both selections
-    return f'{solvent_selection} | {ions_selection}'
-
-    
 # YML construction
 def config_contents(
     input_mode: Literal['input_pdb', 'input_gro_top', 'restart_simulation'],
@@ -1320,82 +1141,19 @@ step1_gro2pdb:
   properties:
     binary_path: {gmx_bin}
 
-step6_dry_str:
-  tool: gmx_trjconv_str
-  paths: 
-    input_structure_path: dependency/step1_gro2pdb/output_str_path
-    input_top_path: dependency/step1_grompp_md/output_tpr_path
-    input_index_path: dependency/step4_make_ndx/output_ndx_path
-    output_str_path: dry_structure.pdb
-  properties:
-    binary_path: {gmx_bin}     
-    selection: "{output_group}"
-    center: true
-    pbc: mol
-    ur: compact
-    
-step7_dry_traj:
-  tool: gmx_trjconv_trj
-  paths: 
-    input_traj_path: dependency/step2_mdrun_prod/output_xtc_path
-    input_top_path: dependency/step1_grompp_md/output_tpr_path
-    input_index_path: dependency/step4_make_ndx/output_ndx_path
-    output_traj_path: dry_traj.xtc
-  properties:
-    binary_path: {gmx_bin}     
-    selection: "{output_group}"
+# NOTE: the trajectory post-processing (strip solvent, whole, cluster, nojump, center, image, fit)
+# is delegated to the traj_postprocessing workflow, run from the workflow body into
+# 4_analysis/postprocessing. Its outputs are promoted to 4_analysis/trajectory.xtc and
+# 4_analysis/structure.pdb, which the steps below take as input.
 
-step8_center:
-  tool: gmx_image 
-  paths:
-    input_traj_path: dependency/step7_dry_traj/output_traj_path
-    input_top_path: dependency/step1_grompp_md/output_tpr_path
-    input_index_path: dependency/step4_make_ndx/output_ndx_path
-    output_traj_path: center_traj.xtc
-  properties:
-    binary_path: {gmx_bin}     
-    center_selection: "Center"
-    output_selection: "{output_group}"
-    center: true
-    ur: compact
-    pbc: none
-
-step9_image_traj:
-  tool: gmx_image
-  paths:
-    input_traj_path: dependency/step8_center/output_traj_path
-    input_top_path: dependency/step1_grompp_md/output_tpr_path
-    input_index_path: dependency/step4_make_ndx/output_ndx_path
-    output_traj_path: imaged_traj.xtc
-  properties:
-    binary_path: {gmx_bin}     
-    output_selection: "{output_group}"
-    center: false
-    ur: compact
-    pbc: mol
-
-step10_fit_traj:
-  tool: gmx_image
-  paths:
-    input_traj_path: dependency/step9_image_traj/output_traj_path
-    input_top_path: dependency/step1_grompp_md/output_tpr_path
-    input_index_path: dependency/step4_make_ndx/output_ndx_path
-    output_traj_path: fitted_traj.xtc
-  properties:
-    binary_path: {gmx_bin}
-    fit_selection: "{solute_group}"
-    output_selection: "{output_group}"
-    center: false
-    fit: rot+trans
-
-# NOTE: steps 11-16 run AFTER the trajectory post-processing (steps 6-10) so that the basic
-# analysis is computed on the clean, dry, imaged, centered and fitted trajectory
-# (step10_fit_traj). Running these on the raw trajectory produced PBC/imaging artifacts
-# (e.g. spurious single-residue RMSF spikes on surface residues near the box edge).
+# NOTE: the basic analysis (steps 4-8) runs AFTER the trajectory post-processing so that it is
+# computed on the clean, dry, imaged, centered and fitted trajectory. Running these on the raw
+# trajectory produced PBC/imaging artifacts (e.g. spurious single-residue RMSF spikes on surface
+# residues near the box edge).
 
 # Dry reference for the equilibrated-structure RMSD (strip npt.gro to the output group so its
 # atom set matches the dry fitted trajectory)
-step11_dry_npt_ref:
+step2_dry_npt_ref:
   tool: gmx_trjconv_str
   paths:
     input_structure_path: dependency/step11_mdrun_npt/output_gro_path  # Will be set by the workflow
@@ -1407,7 +1165,7 @@ step11_dry_npt_ref:
     selection: "{output_group}"
 
 # Dry reference for the experimental-structure RMSD (strip genion.gro to the output group)
-step12_dry_genion_ref:
+step3_dry_genion_ref:
   tool: gmx_trjconv_str
   paths:
     input_structure_path: dependency/step9_genion/output_gro_path      # Will be set by the workflow
@@ -1418,44 +1176,47 @@ step12_dry_genion_ref:
     binary_path: {gmx_bin}
     selection: "{output_group}"
 
-step13_rmsd_equilibrated:
+# The post-processed trajectory and structure (paths below) are set by the workflow from the
+# outputs of the nested traj_postprocessing run
+
+step4_rmsd_equilibrated:
   tool: gmx_rms
   paths:
-    input_structure_path: dependency/step11_dry_npt_ref/output_str_path
-    input_traj_path: dependency/step10_fit_traj/output_traj_path
+    input_structure_path: dependency/step2_dry_npt_ref/output_str_path
+    input_traj_path: path/to/trajectory.xtc                            # Will be set by the workflow
     output_xvg_path: md_rmsdfirst.xvg
   properties:
     binary_path: {gmx_bin}
     selection: Backbone
     xvg: xmgr
 
-step14_rmsd_experimental:
+step5_rmsd_experimental:
   tool: gmx_rms
   paths:
-    input_structure_path: dependency/step12_dry_genion_ref/output_str_path
-    input_traj_path: dependency/step10_fit_traj/output_traj_path
+    input_structure_path: dependency/step3_dry_genion_ref/output_str_path
+    input_traj_path: path/to/trajectory.xtc                            # Will be set by the workflow
     output_xvg_path: md_rmsdexp.xvg
   properties:
     binary_path: {gmx_bin}
     selection: Backbone
     xvg: xmgr
 
-step15_rgyr:
+step6_rgyr:
   tool: gmx_rgyr
   paths:
-    input_structure_path: dependency/step6_dry_str/output_str_path
-    input_traj_path: dependency/step10_fit_traj/output_traj_path
+    input_structure_path: path/to/structure.pdb                        # Will be set by the workflow
+    input_traj_path: path/to/trajectory.xtc                            # Will be set by the workflow
     output_xvg_path: md_rgyr.xvg
   properties:
     binary_path: {gmx_bin}
     selection: Backbone
     xvg: xmgr
 
-step16_rmsf:
+step7_rmsf:
   tool: cpptraj_rmsf
   paths:
-    input_top_path: dependency/step6_dry_str/output_str_path
-    input_traj_path: dependency/step10_fit_traj/output_traj_path
+    input_top_path: path/to/structure.pdb                              # Will be set by the workflow
+    input_traj_path: path/to/trajectory.xtc                            # Will be set by the workflow
     output_cpptraj_path: md_rmsf.xmgr   # .dat, .agr, .xmgr, .gnu
   properties:
     start: 1
@@ -1465,13 +1226,13 @@ step16_rmsf:
 
 # Per-ligand RMSD (pose stability): ligand heavy-atom RMSD after aligning the complex, i.e.
 # how far the ligand drifts from its starting pose. Only run if a ligand is present. nofit is
-# used so the ligand is NOT re-superposed on itself (the trajectory is already fitted on the
-# complex in step10_fit_traj). Output path and mask are set per-ligand by the workflow.
-step17_rmsd_ligand:
+# used so the ligand is NOT re-superposed on itself (the post-processed trajectory is already
+# fitted on the complex). Output path and mask are set per-ligand by the workflow.
+step8_rmsd_ligand:
   tool: cpptraj_rms
   paths:
-    input_top_path: dependency/step6_dry_str/output_str_path
-    input_traj_path: dependency/step10_fit_traj/output_traj_path
+    input_top_path: path/to/structure.pdb                              # Will be set by the workflow
+    input_traj_path: path/to/trajectory.xtc                            # Will be set by the workflow
     output_cpptraj_path: md_rmsd_ligand.xmgr   # .dat, .agr, .xmgr, .gnu
   properties:
     start: 1
@@ -1575,6 +1336,9 @@ def md_gromacs(
     remove_raw_traj: Optional[bool] = False,
     keep_solvent: Optional[bool] = False,
     residues_to_keep: Optional[List[int]] = None,
+    extra_ions: List[str] = [],
+    extra_solvents: List[str] = [],
+    fast: Optional[bool] = False,
     debug: Optional[bool] = False,
     output_path: Optional[str] = 'output'
     ) -> Tuple[str, Dict[str, Any]]:
@@ -1653,6 +1417,15 @@ def md_gromacs(
             Keep solvent and ions in the final post-processed trajectory.
         residues_to_keep:
             List of specific residue indices to keep in the final post-processed trajectory besides the solute
+        extra_ions:
+            Additional ion atom names to include in the solvent group, used for the temperature coupling
+            groups and to strip the trajectory (e.g. extra_ions=["NA+", "CA2+"])
+        extra_solvents:
+            Additional solvent residue names to include in the solvent group, used for the temperature
+            coupling groups and to strip the trajectory (e.g. extra_solvents=["TIP3", "TIP4"])
+        fast:
+            Skip making the solute whole, removing jumps and clustering during the trajectory
+            post-processing. Faster, but more prone to PBC artifacts.
         debug:
             whether to run the workflow in debug mode (keep temporary files)
         output_path: 
@@ -1701,8 +1474,8 @@ def md_gromacs(
                                    input_cpt_path,
                                    output_path)
 
-    solvent_names = get_residue_types(input_pdb_path, solvent_library)
-    ion_names = get_atom_types(input_pdb_path, ions_library)
+    solvent_names = get_residue_types(input_pdb_path, solvent_library + list(extra_solvents))
+    ion_names = get_atom_types(input_pdb_path, ions_library + list(extra_ions))
     solvent_selection = build_solvent_selection(solvent_names, ion_names)
     
     # Validate that user-requested residues actually exist in the structure
@@ -2143,175 +1916,137 @@ def md_gromacs(
     # Connect post-processing to previous steps
     analysis_paths['step1_gro2pdb']['input_top_path'] = prod_paths["step2_mdrun_prod"]['output_gro_path']
     analysis_paths['step1_gro2pdb']['input_structure_path'] = prod_paths["step2_mdrun_prod"]['output_gro_path']
-    analysis_paths['step7_dry_traj']['input_traj_path'] = prod_paths["step2_mdrun_prod"]['output_xtc_path']
-    # NOTE: the basic analysis (RMSD/Rgyr/RMSF, steps 13-16) is wired and run AFTER the
-    # trajectory post-processing (steps 6-10), so it uses the clean fitted trajectory.
 
-    post_proces_steps = ['step6_dry_str', 'step7_dry_traj', 'step8_center', 'step9_image_traj', 'step10_fit_traj']
-    for step in post_proces_steps:
-        analysis_paths[step]['input_top_path'] = input_tpr_path
-    for step in post_proces_steps:
-        analysis_paths[step]['input_index_path'] = input_ndx_path
-    
     # STEP 1: conversion of topology from gro to pdb
     global_log.info("step1_gro2pdb: Convert topology from GRO to PDB")
     gmx_trjconv_str(**analysis_paths["step1_gro2pdb"], properties=analysis_prop["step1_gro2pdb"])
 
-    # STEP 6: obtain dry structure
+    ###############################
+    # Trajectory post-processing  #
+    ###############################
+
+    # Delegated to the traj_postprocessing workflow, reusing the index file built for the T-coupling
+    # groups (same Solute_group/Output_group as the dry references of steps 2 and 3 below).
+    postprocessing_path = os.path.join(output_path, analysis_prefix, 'postprocessing')
+    fitted_traj_path = os.path.join(output_path, analysis_prefix, 'trajectory.xtc')
+    dry_structure_path = os.path.join(output_path, analysis_prefix, 'structure.pdb')
+
+    global_log.info("Post-processing the trajectory with the traj_postprocessing workflow")
     try:
-        global_log.info("step6_dry_str: Obtain dry structure")
-        gmx_trjconv_str(**analysis_paths["step6_dry_str"], properties=analysis_prop["step6_dry_str"])
-        global_log.info("step6_dry_str: Completed successfully")
-    
-    except SystemExit as e:
-        global_log.error(
-            f"step6_dry_str failed due to GMX exit "
-            f"(SystemExit, code={e.code})"
+        traj_postprocessing(
+            input_traj_path=prod_paths["step2_mdrun_prod"]['output_xtc_path'],
+            input_topology_path=input_tpr_path,
+            input_structure_path=analysis_paths["step1_gro2pdb"]["output_str_path"],
+            input_index_path=input_ndx_path,
+            gmx_bin=gmx_bin,
+            keep_solvent=keep_solvent,
+            residues_to_keep=residues_to_keep,
+            solvent_selection=solvent_selection,
+            fast=fast,
+            debug=debug,
+            restart=restart,
+            output_path=postprocessing_path,
+            output_traj_path=fitted_traj_path,
+            output_str_path=dry_structure_path
         )
-    except Exception:
-        global_log.exception("step6_dry_str failed with unexpected exception")
-    
-    # Find atom index of central atom in dry system 
-    # Assumption: all ions and waters appear after the dry system atoms, thus the atom index remains the same
-    central_index = get_central_atom_index(analysis_paths["step6_dry_str"]["output_str_path"])
 
-    # Create another index file including the central atom and use it to center the system
-    new_index_file = os.path.join(analysis_prop["step6_dry_str"]["path"], 'new_index.ndx')
-    add_group([central_index], 'Center', input_ndx_path, new_index_file)
-    analysis_paths['step8_center']['input_index_path'] = new_index_file
-        
-    # STEPS 7-10: process trajectory: dry, center, image, fit
-    try:
-        # STEP 7: obtain dry trajectory
-        global_log.info("step7_dry_traj: Obtain dry trajectory")
-        gmx_trjconv_trj(**analysis_paths["step7_dry_traj"], properties=analysis_prop["step7_dry_traj"])
-
-        # STEP 8: center the trajectory
-        global_log.info("step8_center: Center the trajectory")
-        gmx_image(**analysis_paths['step8_center'], properties=analysis_prop['step8_center'])
-
-        if not debug:
-            # Remove intermediate trajectory
-            os.remove(analysis_paths["step7_dry_traj"]["output_traj_path"])
-
-        # STEP 9: image the trajectory
-        global_log.info("step9_image_traj: Imaging the trajectory")
-        gmx_image(**analysis_paths['step9_image_traj'], properties=analysis_prop['step9_image_traj'])
-
-        if not debug:
-            # Remove intermediate trajectory
-            os.remove(analysis_paths["step8_center"]["output_traj_path"])
-        
-        # STEP 10: fit the trajectory
-        global_log.info("step10_fit_traj: Fit the trajectory")
-        gmx_image(**analysis_paths['step10_fit_traj'], properties=analysis_prop['step10_fit_traj'])
-
-        if not debug:
-            # Remove intermediate trajectory
-            os.remove(analysis_paths["step9_image_traj"]["output_traj_path"])
-            
         # Clean up raw trajectories if requested
-        if remove_raw_traj:
+        if remove_raw_traj and os.path.exists(fitted_traj_path):
             global_log.info("Cleaning up raw production trajectories to save space...")
             raw_xtc = prod_paths["step2_mdrun_prod"]['output_xtc_path']
-            
+
             for file_to_remove in [raw_xtc]:
                 if os.path.exists(file_to_remove):
                     os.remove(file_to_remove)
                     global_log.info(f"Removed: {file_to_remove}")
 
     except SystemExit as e:
-        global_log.error(
-            f"steps 7 to 10 failed due to GMX exit "
-            f"(SystemExit, code={e.code})"
-        )
+        global_log.error(f"Trajectory post-processing failed (SystemExit, code={e.code})")
     except Exception:
-        global_log.exception("steps 7 to 10 failed with unexpected exception")
+        global_log.exception("Trajectory post-processing failed with unexpected exception")
 
-    # STEPS 11-16: basic analysis on the post-processed (dry, imaged, centered, fitted) trajectory. 
-    fitted_traj_path = analysis_paths["step10_fit_traj"]["output_traj_path"]
-    dry_structure_path = analysis_paths["step6_dry_str"]["output_str_path"]
+    # STEPS 2-8: basic analysis on the post-processed (dry, imaged, centered, fitted) trajectory.
     ligand_rmsd_paths: Dict[str, str] = {}
     if os.path.exists(fitted_traj_path) and os.path.exists(dry_structure_path):
 
-        # STEPS 11 & 13: RMSD vs the equilibrated structure. Only possible when the workflow
+        # STEPS 2 & 4: RMSD vs the equilibrated structure. Only possible when the workflow
         # equilibrated the system (input_pdb / input_gro_top) - restart_simulation has no npt.gro.
         # The npt.gro is stripped to the output group so its atom set matches the dry fitted traj.
         equilibrated_ref_gro = (
             equil_paths["step11_mdrun_npt"]["output_gro_path"] if equil_needed else None
         )
         if equilibrated_ref_gro and os.path.exists(equilibrated_ref_gro):
-            analysis_paths["step11_dry_npt_ref"]["input_structure_path"] = equilibrated_ref_gro
-            analysis_paths["step11_dry_npt_ref"]["input_top_path"] = input_tpr_path
-            analysis_paths["step11_dry_npt_ref"]["input_index_path"] = input_ndx_path
-            global_log.info("step11_dry_npt_ref: Build dry equilibrated reference for RMSD")
-            gmx_trjconv_str(**analysis_paths["step11_dry_npt_ref"], properties=analysis_prop["step11_dry_npt_ref"])
+            analysis_paths["step2_dry_npt_ref"]["input_structure_path"] = equilibrated_ref_gro
+            analysis_paths["step2_dry_npt_ref"]["input_top_path"] = input_tpr_path
+            analysis_paths["step2_dry_npt_ref"]["input_index_path"] = input_ndx_path
+            global_log.info("step2_dry_npt_ref: Build dry equilibrated reference for RMSD")
+            gmx_trjconv_str(**analysis_paths["step2_dry_npt_ref"], properties=analysis_prop["step2_dry_npt_ref"])
 
-            # STEP 13: compute the RMSD with respect to equilibrated structure
-            analysis_paths["step13_rmsd_equilibrated"]["input_traj_path"] = fitted_traj_path
-            analysis_paths["step13_rmsd_equilibrated"]["input_structure_path"] = analysis_paths["step11_dry_npt_ref"]["output_str_path"]
-            global_log.info("step13_rmsd_equilibrated: Compute Root Mean Square deviation against equilibrated structure")
-            gmx_rms(**analysis_paths["step13_rmsd_equilibrated"], properties=analysis_prop["step13_rmsd_equilibrated"])
+            # STEP 4: compute the RMSD with respect to equilibrated structure
+            analysis_paths["step4_rmsd_equilibrated"]["input_traj_path"] = fitted_traj_path
+            analysis_paths["step4_rmsd_equilibrated"]["input_structure_path"] = analysis_paths["step2_dry_npt_ref"]["output_str_path"]
+            global_log.info("step4_rmsd_equilibrated: Compute Root Mean Square deviation against equilibrated structure")
+            gmx_rms(**analysis_paths["step4_rmsd_equilibrated"], properties=analysis_prop["step4_rmsd_equilibrated"])
         else:
-            global_log.info("step13_rmsd_equilibrated: skipped (no equilibrated reference available for this input mode)")
+            global_log.info("step4_rmsd_equilibrated: skipped (no equilibrated reference available for this input mode)")
 
-        # STEPS 12 & 14: RMSD vs the experimental/starting structure. `input_gro_path` is the
+        # STEPS 3 & 5: RMSD vs the experimental/starting structure. `input_gro_path` is the
         # structure fed into minimization: genion.gro when solvated, or the raw structure when
         # --skip_solvation. Only defined when the workflow set up the system (input_pdb /
         # input_gro_top) - restart_simulation has no starting structure. Stripped to output group.
         experimental_ref_gro = input_gro_path if setup_needed else None
         if experimental_ref_gro and os.path.exists(experimental_ref_gro):
-            analysis_paths["step12_dry_genion_ref"]["input_structure_path"] = experimental_ref_gro
-            analysis_paths["step12_dry_genion_ref"]["input_top_path"] = input_tpr_path
-            analysis_paths["step12_dry_genion_ref"]["input_index_path"] = input_ndx_path
-            global_log.info("step12_dry_genion_ref: Build dry experimental reference for RMSD")
-            gmx_trjconv_str(**analysis_paths["step12_dry_genion_ref"], properties=analysis_prop["step12_dry_genion_ref"])
+            analysis_paths["step3_dry_genion_ref"]["input_structure_path"] = experimental_ref_gro
+            analysis_paths["step3_dry_genion_ref"]["input_top_path"] = input_tpr_path
+            analysis_paths["step3_dry_genion_ref"]["input_index_path"] = input_ndx_path
+            global_log.info("step3_dry_genion_ref: Build dry experimental reference for RMSD")
+            gmx_trjconv_str(**analysis_paths["step3_dry_genion_ref"], properties=analysis_prop["step3_dry_genion_ref"])
 
-            # STEP 14: compute the RMSD with respect to minimized (experimental) structure
-            analysis_paths["step14_rmsd_experimental"]["input_traj_path"] = fitted_traj_path
-            analysis_paths["step14_rmsd_experimental"]["input_structure_path"] = analysis_paths["step12_dry_genion_ref"]["output_str_path"]
-            global_log.info("step14_rmsd_experimental: Compute Root Mean Square deviation against minimized structure (exp)")
-            gmx_rms(**analysis_paths["step14_rmsd_experimental"], properties=analysis_prop["step14_rmsd_experimental"])
+            # STEP 5: compute the RMSD with respect to minimized (experimental) structure
+            analysis_paths["step5_rmsd_experimental"]["input_traj_path"] = fitted_traj_path
+            analysis_paths["step5_rmsd_experimental"]["input_structure_path"] = analysis_paths["step3_dry_genion_ref"]["output_str_path"]
+            global_log.info("step5_rmsd_experimental: Compute Root Mean Square deviation against minimized structure (exp)")
+            gmx_rms(**analysis_paths["step5_rmsd_experimental"], properties=analysis_prop["step5_rmsd_experimental"])
         else:
-            global_log.info("step14_rmsd_experimental: skipped (no experimental reference available for this input mode/flags)")
+            global_log.info("step5_rmsd_experimental: skipped (no experimental reference available for this input mode/flags)")
 
-        # STEPS 15-17: Rgyr, RMSF and per-ligand RMSD use the dry structure (available in all
+        # STEPS 6-8: Rgyr, RMSF and per-ligand RMSD use the dry structure (available in all
         # modes), so they always run once the fitted trajectory and dry structure exist.
-        analysis_paths["step15_rgyr"]["input_traj_path"] = fitted_traj_path
-        analysis_paths["step15_rgyr"]["input_structure_path"] = dry_structure_path
-        analysis_paths["step16_rmsf"]["input_traj_path"] = fitted_traj_path
-        analysis_paths["step16_rmsf"]["input_top_path"] = dry_structure_path
+        analysis_paths["step6_rgyr"]["input_traj_path"] = fitted_traj_path
+        analysis_paths["step6_rgyr"]["input_structure_path"] = dry_structure_path
+        analysis_paths["step7_rmsf"]["input_traj_path"] = fitted_traj_path
+        analysis_paths["step7_rmsf"]["input_top_path"] = dry_structure_path
 
-        # STEP 15: compute the Radius of gyration
-        global_log.info("step15_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
-        gmx_rgyr(**analysis_paths["step15_rgyr"], properties=analysis_prop["step15_rgyr"])
+        # STEP 6: compute the Radius of gyration
+        global_log.info("step6_rgyr: Compute Radius of Gyration to measure the protein compactness during the free MD simulation")
+        gmx_rgyr(**analysis_paths["step6_rgyr"], properties=analysis_prop["step6_rgyr"])
 
-        # STEP 16: compute the RMSF
-        global_log.info("step16_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
-        cpptraj_rmsf(**analysis_paths["step16_rmsf"], properties=analysis_prop["step16_rmsf"])
+        # STEP 7: compute the RMSF
+        global_log.info("step7_rmsf: Compute Root Mean Square Fluctuation to measure the protein flexibility during the free MD simulation")
+        cpptraj_rmsf(**analysis_paths["step7_rmsf"], properties=analysis_prop["step7_rmsf"])
 
-        # STEP 17: per-ligand RMSD (pose stability) - only if a ligand is present. Measured on the
+        # STEP 8: per-ligand RMSD (pose stability) - only if a ligand is present. Measured on the
         # fitted trajectory with nofit, so it reflects ligand drift from the starting pose in the
         # complex frame (gmx rms cannot fit-on-protein + rmsd-on-ligand).
         if ligands_dict:
             ligand_resnames = get_residue_types(dry_structure_path, list(ligands_dict))
             missing = [lig for lig in ligands_dict if lig not in ligand_resnames]
             if missing:
-                global_log.warning(f"step17_rmsd_ligand: ligand id(s) {missing} not found as residues "
+                global_log.warning(f"step8_rmsd_ligand: ligand id(s) {missing} not found as residues "
                                    f"in the dry structure (the id must match the residue name); skipping those.")
-            ligand_rmsd_dir = os.path.dirname(analysis_paths["step17_rmsd_ligand"]["output_cpptraj_path"])
+            ligand_rmsd_dir = os.path.dirname(analysis_paths["step8_rmsd_ligand"]["output_cpptraj_path"])
             for ligand_name in ligand_resnames:
-                analysis_paths["step17_rmsd_ligand"]["input_traj_path"] = fitted_traj_path
-                analysis_paths["step17_rmsd_ligand"]["input_top_path"] = dry_structure_path
-                analysis_paths["step17_rmsd_ligand"]["output_cpptraj_path"] = os.path.join(ligand_rmsd_dir, f"md_rmsd_ligand_{ligand_name}.xmgr")
-                analysis_prop["step17_rmsd_ligand"]["mask"] = f"(:{ligand_name}&!@H=)"
-                global_log.info(f"step17_rmsd_ligand: Compute ligand RMSD (pose stability) for {ligand_name}")
-                cpptraj_rms(**analysis_paths["step17_rmsd_ligand"], properties=analysis_prop["step17_rmsd_ligand"])
-                ligand_rmsd_paths[ligand_name] = analysis_paths["step17_rmsd_ligand"]["output_cpptraj_path"]
+                analysis_paths["step8_rmsd_ligand"]["input_traj_path"] = fitted_traj_path
+                analysis_paths["step8_rmsd_ligand"]["input_top_path"] = dry_structure_path
+                analysis_paths["step8_rmsd_ligand"]["output_cpptraj_path"] = os.path.join(ligand_rmsd_dir, f"md_rmsd_ligand_{ligand_name}.xmgr")
+                analysis_prop["step8_rmsd_ligand"]["mask"] = f"(:{ligand_name}&!@H=)"
+                global_log.info(f"step8_rmsd_ligand: Compute ligand RMSD (pose stability) for {ligand_name}")
+                cpptraj_rms(**analysis_paths["step8_rmsd_ligand"], properties=analysis_prop["step8_rmsd_ligand"])
+                ligand_rmsd_paths[ligand_name] = analysis_paths["step8_rmsd_ligand"]["output_cpptraj_path"]
 
     else:
         global_log.error("Basic analysis (RMSD/Rgyr/RMSF) skipped: post-processed trajectory "
-                         "or dry structure not found. Check the trajectory post-processing steps (6-10).")
+                         "or dry structure not found. Check the nested traj_postprocessing run.")
 
     # Write a stable output manifest for external consumers (see manifest.yaml in output_path)
     stage_ran_setup_and_equil = input_mode in ('input_pdb', 'input_gro_top')
@@ -2324,7 +2059,7 @@ def md_gromacs(
         "structure": {
             "final": {"gro": prod_paths["step2_mdrun_prod"]["output_gro_path"]},
         },
-        "dry_structure": {"pdb": analysis_paths["step6_dry_str"]["output_str_path"]},
+        "dry_structure": {"pdb": dry_structure_path},
         "topology": {
             "pdb": analysis_paths["step1_gro2pdb"]["output_str_path"],
             "tpr": tpr_path,
@@ -2333,10 +2068,10 @@ def md_gromacs(
         "dry_trajectory": {"xtc": fitted_traj_path},
         "checkpoint": {"cpt": prod_paths["step2_mdrun_prod"]["output_cpt_path"]},
         "analysis": {
-            "rmsd_equilibrated": {"xvg": analysis_paths["step13_rmsd_equilibrated"]["output_xvg_path"]},
-            "rmsd_experimental": {"xvg": analysis_paths["step14_rmsd_experimental"]["output_xvg_path"]},
-            "rgyr": {"xvg": analysis_paths["step15_rgyr"]["output_xvg_path"]},
-            "rmsf": {"xmgr": analysis_paths["step16_rmsf"]["output_cpptraj_path"]},
+            "rmsd_equilibrated": {"xvg": analysis_paths["step4_rmsd_equilibrated"]["output_xvg_path"]},
+            "rmsd_experimental": {"xvg": analysis_paths["step5_rmsd_experimental"]["output_xvg_path"]},
+            "rgyr": {"xvg": analysis_paths["step6_rgyr"]["output_xvg_path"]},
+            "rmsf": {"xmgr": analysis_paths["step7_rmsf"]["output_cpptraj_path"]},
             **{f"rmsd_ligand_{name}": {"xmgr": path} for name, path in ligand_rmsd_paths.items()},
         },
     }
@@ -2414,8 +2149,7 @@ def main():
     # NOTE: Add option for H mass repartitioning
     # NOTE: Add flag to determine what should remain restrained during the production run - currently everything is free always
     # NOTE: Add progressive release of position restraints during equilibration (additional steps if needed)
-    # NOTE: Call traj postprocessing function from the package instead of re-writing it here
-    # NOTE: Add type of water model as an option 
+    # NOTE: Add type of water model as an option
 
     #########################
     # Configuration options #
@@ -2515,7 +2249,22 @@ def main():
     parser.add_argument('--keep_residues', dest='residues_to_keep', type=int, nargs='+',
                         help="List of specific residue indices to keep in the final post-processed trajectory (e.g., --keep_residues 15 23 105). Default: None",
                         required=False)
-    
+
+    parser.add_argument('--ions', dest='extra_ions', type=str, nargs='+',
+                        help="""Additional ion atom names to include in the solvent group, used for the temperature coupling
+                        groups and to strip the trajectory (e.g. --ions NA+ CA2+). Default: []""",
+                        required=False, default=[])
+
+    parser.add_argument('--solvents', dest='extra_solvents', type=str, nargs='+',
+                        help="""Additional solvent residue names to include in the solvent group, used for the temperature coupling
+                        groups and to strip the trajectory (e.g. --solvents TIP3 TIP4). Default: []""",
+                        required=False, default=[])
+
+    parser.add_argument('--fast', action='store_true',
+                        help="""Skip making the solute whole, removing jumps and clustering during the trajectory
+                        post-processing. Faster, but more prone to PBC artifacts. Default: False""",
+                        required=False, default=False)
+
     parser.add_argument('--debug', action='store_true',
                         help="Activate debug mode with more verbose logging. Default: False",
                         required=False, default=False)
@@ -2577,6 +2326,9 @@ def main():
         remove_raw_traj=args.remove_raw_traj,
         keep_solvent=args.keep_solvent,
         residues_to_keep=args.residues_to_keep,
+        extra_ions=args.extra_ions,
+        extra_solvents=args.extra_solvents,
+        fast=args.fast,
         debug=args.debug,
         output_path=args.output_path)
 
