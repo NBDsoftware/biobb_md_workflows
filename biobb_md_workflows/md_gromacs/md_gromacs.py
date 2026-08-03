@@ -1928,8 +1928,14 @@ def md_gromacs(
     # Delegated to the traj_postprocessing workflow, reusing the index file built for the T-coupling
     # groups (same Solute_group/Output_group as the dry references of steps 2 and 3 below).
     postprocessing_path = os.path.join(output_path, analysis_prefix, 'postprocessing')
-    fitted_traj_path = os.path.join(output_path, analysis_prefix, 'trajectory.xtc')
-    dry_structure_path = os.path.join(output_path, analysis_prefix, 'structure.pdb')
+    
+    # Create the folders expected by the plugin - temporal compatibility requirement
+    fitted_traj_dir = os.path.join(output_path, analysis_prefix, 'step10_fit_traj')
+    os.makedirs(fitted_traj_dir, exist_ok=True)
+    fitted_traj_path = os.path.join(fitted_traj_dir, 'fitted_traj.xtc')
+    dry_structure_dir = os.path.join(output_path, analysis_prefix, 'step6_dry_str')
+    os.makedirs(dry_structure_dir, exist_ok=True)
+    dry_structure_path = os.path.join(dry_structure_dir, 'dry_structure.pdb')
 
     global_log.info("Post-processing the trajectory with the traj_postprocessing workflow")
     try:
