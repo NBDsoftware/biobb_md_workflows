@@ -1593,7 +1593,7 @@ def md_gromacs(
 
                 # Save group names for each chain
                 chains_dict[chain_id]["reference_group"] = f"r_{start}-{end}"
-                chains_dict[chain_id]["restrain_group"] = "_|_".join([f"{atom}_&_r_{start}-{end}" for atom in restraint_atoms]) # NOTE: check this works by changing CA -> another atom temporarily
+                chains_dict[chain_id]["restrain_group"] = "_".join([f"{atom}_&_r_{start}-{end}" for atom in restraint_atoms]) # NOTE: check this works by changing CA -> another atom temporarily
                 
                 # Save POSRES names for each chain
                 chains_dict[chain_id]["posres_name"] = f"CHAIN_{chain_id}_POSRES"
