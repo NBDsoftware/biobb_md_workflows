@@ -13,7 +13,7 @@ author = 'Nostrum Biodiscovery'
 
 # The full version, including alpha/beta/rc tags.
 # Maintained by scripts/bump_version.py — do not edit by hand.
-release = '0.1.1'
+release = '0.1.2'
 
 
 # -- General configuration ---------------------------------------------------
