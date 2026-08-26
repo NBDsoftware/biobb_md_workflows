@@ -1,0 +1,59 @@
+name: Release
+
+# Cut a release: type the version once here and everything else is derived — all in-repo
+# version strings, the git tag, and the GitHub Release (notes taken from the CHANGELOG's
+# [Unreleased] section). Run from the branch you want to release (normally master).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.2.0 (no leading 'v')"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need tags to detect a duplicate release
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check the tag does not already exist
+        run: |
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::tag $VERSION already exists"
+            exit 1
+          fi
+
+      - name: Set version everywhere and roll the CHANGELOG
+        run: python scripts/bump_version.py "$VERSION" --notes-out "$RUNNER_TEMP/notes.md"
+
+      - name: Commit, tag and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "release: $VERSION"
+          git tag "$VERSION"
+          git push origin "HEAD:$GITHUB_REF_NAME" --follow-tags
+
+      - name: Create the GitHub release
+        run: |
+          # The tag was pushed above, so the release attaches to that exact commit.
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md"

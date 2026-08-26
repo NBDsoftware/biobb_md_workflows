@@ -11,8 +11,9 @@ project = 'BioBB MD Workflows'
 copyright = '2026, Nostrum Biodiscovery'
 author = 'Nostrum Biodiscovery'
 
-# The full version, including alpha/beta/rc tags
-release = '0.1'
+# The full version, including alpha/beta/rc tags.
+# Maintained by scripts/bump_version.py — do not edit by hand.
+release = '0.1.1'
 
 
 # -- General configuration ---------------------------------------------------

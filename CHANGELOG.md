@@ -5,8 +5,24 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Added
-- **protein_preparation**: `--pdb_code` can now be used on its own (without `--input_pdb`) to
-  fetch the structure directly from RCSB.
+
+- **Dynamic versioning using github actions and the bump_version.py script**
+
+### Fixed
+
+- **Correct name of index group for multi atomtype restrains**
+
+## [0.1.1] - 2026-08-04
+
+Docs, tutorials, bug fixes and better application of the FAIR4RS principles.
+
+### Added
+- **md_gromacs**: `traj_postprocessing` is now defined once and called from `md_gromacs`, instead of
+  being duplicated across both workflows.
+
+### Fixed
+- **md_gromacs**: matching `.tpr`, trajectory and index files — integrating `traj_postprocessing`
+  into `md_gromacs` brings the `.tpr` fix into the main MD workflow.
 
 ## [0.1.0] - 2026-07-23
 
@@ -49,4 +65,5 @@ All notable changes to this project are documented here.
 - New tutorial page and README section (with Colab badge), project logos, a FAIR4RS
   assessment (`docs/fair4rs_assessment.md`), a `CITATION.cff`, and Sphinx warning fixes.
 
+[0.1.1]: https://github.com/NBDsoftware/biobb_md_workflows/releases/tag/0.1.1
 [0.1.0]: https://github.com/NBDsoftware/biobb_md_workflows/releases/tag/0.1.0
