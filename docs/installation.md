@@ -19,9 +19,12 @@ Every version string in the repo (`pyproject.toml`, the three conda env files, `
 `docs/conf.py`) is generated — do not edit them by hand. Instead:
 
 1. Describe the changes under `## [Unreleased]` in `CHANGELOG.md` as you work.
-2. Go to **Actions ▸ Release ▸ Run workflow**, pick the branch (normally `master`), and enter the
-   new version (e.g. `0.2.0`, no leading `v`).
+2. **Actions ▸ Release (1/2) prepare ▸ Run workflow**, branch `master`, version e.g. `0.2.0`
+   (no leading `v`). This rewrites the version everywhere, renames `[Unreleased]` to the new
+   version, and pushes a `release/0.2.0` branch. The job summary links you to the PR.
+3. Open that PR (keep the title `release: 0.2.0`) and merge it.
+4. **Release (2/2) publish** then fires automatically: it tags the release commit and publishes
+   the GitHub Release, using that CHANGELOG section as the notes.
 
-The workflow rewrites the version everywhere, renames `[Unreleased]` to the new version, commits,
-tags, and publishes the GitHub Release using that CHANGELOG section as the release notes. Preview
-what it would do locally with `python scripts/bump_version.py 0.2.0 --dry-run`.
+It is split in two because `master` requires pull requests, so the version change cannot be pushed
+to it directly.

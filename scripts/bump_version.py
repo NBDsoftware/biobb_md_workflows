@@ -109,6 +109,12 @@ def main() -> int:
     parser.add_argument(
         "--dry-run", action="store_true", help="print a diff instead of writing"
     )
+    parser.add_argument(
+        "--notes-only",
+        action="store_true",
+        help="only extract the version's existing CHANGELOG section; change no files "
+        "(used by the publish workflow, after the bump has already been merged)",
+    )
     args = parser.parse_args()
 
     version = args.version.strip()
@@ -118,6 +124,14 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+
+    if args.notes_only:
+        notes = release_notes((REPO / CHANGELOG).read_text(), version)
+        if args.notes_out:
+            Path(args.notes_out).write_text(notes + "\n")
+        else:
+            print(notes)
+        return 0
 
     today = datetime.now(timezone.utc).date().isoformat()
     updates: dict[Path, str] = {}
