@@ -8,7 +8,7 @@ Be extremely concise in interactions and commit messages — sacrifice grammar f
 
 ## Project overview
 
-BioBB Workflows for MD simulations with GROMACS: four CLI pipelines built on top of BioExcel Building Blocks (BioBB), developed for the European BioExcel project. Each pipeline lives in its own package under `biobb_md_workflows/` and is exposed as a standalone CLI command:
+BioBB Workflows for MD simulations with GROMACS: five CLI pipelines built on top of BioExcel Building Blocks (BioBB), developed for the European BioExcel project. Each pipeline lives in its own package under `biobb_md_workflows/` and is exposed as a standalone CLI command:
 
 | Command | Module | Purpose |
 |---------|--------|---------|
@@ -16,6 +16,7 @@ BioBB Workflows for MD simulations with GROMACS: four CLI pipelines built on top
 | `ligand_parameterization` | `biobb_md_workflows/ligand_parameterization/ligand_parameterization.py` | Generate GROMACS/AMBER topology+coords for ligands/cofactors (GAFF via acpype, or custom AMBER params via LEaP) |
 | `md_gromacs` | `biobb_md_workflows/md_gromacs/md_gromacs.py` | Full GROMACS MD: setup → equilibration → production → trajectory post-processing |
 | `traj_postprocessing` | `biobb_md_workflows/traj_postprocessing/traj_postprocessing.py` | Standalone post-processing (strip solvent, center, image, fit) of an existing raw trajectory |
+| `godmd_simulation` | `biobb_md_workflows/godmd_simulation/godmd_simulation.py` | Approximate conformational transition between two structures via GOdMD (discrete MD) |
 
 ## Setup / install
 
@@ -43,7 +44,7 @@ The `config.yml` is always auto-generated from the CLI arguments (there is no `-
 
 ## Architecture
 
-All four workflows share the same shape, built around `biobb_common`:
+All five workflows share the same shape, built around `biobb_common`:
 
 1. **YAML config-driven steps.** Each workflow defines a `config_contents()` returning a YAML string (an f-string that interpolates CLI-derived values, using `common.to_yaml()` to render nullable/bool/list scalars safely), always written to `<output>/config.yml` by `create_config_file(output_path, **config_args)`. The YAML has a `global_properties` block (`working_dir_path`, `restart`, `remove_tmp`, `can_write_console_log`) and one block per step named `stepN_name` (or prefixed `sectionprefix_stepN_name`, see below), each with a `tool`, a `paths` dict, and a `properties` dict.
 2. **Dependency chaining.** Step `paths` reference earlier steps' outputs as `dependency/stepX_name/output_key` strings; `settings.ConfReader` resolves these into real paths at runtime via `conf.get_paths_dic()` / `conf.get_prop_dic()`.
@@ -71,6 +72,10 @@ Three mutually-exclusive input modes, resolved by `check_inputs()`: `input_pdb` 
 ### traj_postprocessing specifics
 
 Standalone version of `md_gromacs`'s stage 4 trajectory cleanup, for post-processing a trajectory produced outside this repo. Builds GROMACS index-group selections by auto-detecting solvent/ion residue names from the structure (extendable via `--extra_ions`/`--extra_solvents`), then runs dry → center → image → fit. `--fast` picks a cheaper post-processing path (`fast_postprocessing`) vs the full one (`complete_postprocessing`).
+
+### godmd_simulation specifics
+
+Computes an approximate conformational transition between an origin and a target structure using GOdMD (coarse-grain discrete MD with GO-like biasing potentials, `biobb_godmd`). Origin and target are each resolved independently by `check_inputs()` to `input_pdb` (local file) or `pdb_code` (fetched via `biobb_pdb_fetch`) — one can be a file while the other is a code. Pipeline: fetch (if needed) → `extract_molecule` per structure (selects `--origin_chain`/`--target_chain`, always strips waters/ligands since GOdMD only models the protein) → `godmd_prep` (EMBOSS `water` pairwise alignment → one-to-one residue mapping, two `.aln` files) → `godmd_run` (`discrete` binary; exposes 5 `godmdin` keys on the CLI — `TEMP`/`SEED`/`NBLOC`/`TSNAP`/`ERRORACCEPTABLE` — everything else keeps the biobb default) → `cpptraj_convert` (native `.mdcrd` → `.xtc`, since GOdMD's output format is rejected by most trajectory viewers). `godmd_run` is wrapped in the double-except idiom (like `traj_postprocessing`'s long stages) so the log/manifest are still written on failure. Requires the `emboss` conda package (`water` binary) and `biobb_godmd`, both host-only — no container support in `godmd_prep`.
 
 ## Gotchas
 

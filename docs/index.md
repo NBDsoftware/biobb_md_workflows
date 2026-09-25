@@ -37,6 +37,7 @@ run you can do on Google Colab (no install) or on a local Jupyter.
 | [`ligand_parameterization`](workflows/ligand_parameterization.md) | Generate GROMACS/AMBER topology + coordinates for ligands and cofactors. |
 | [`md_gromacs`](workflows/md_gromacs.md) | Full GROMACS MD: setup → equilibration → production → post-processing. |
 | [`traj_postprocessing`](workflows/traj_postprocessing.md) | Strip solvent, center, image, and fit an existing trajectory. |
+| [`godmd_simulation`](workflows/godmd_simulation.md) | Compute an approximate conformational transition between two structures with GOdMD. |
 
 ```{toctree}
 :maxdepth: 2
@@ -48,6 +49,7 @@ workflows/protein_preparation
 workflows/ligand_parameterization
 workflows/md_gromacs
 workflows/traj_postprocessing
+workflows/godmd_simulation
 fair4rs_assessment
 ```
 
